@@ -12,8 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -34,6 +32,7 @@ import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
+import com.baiyin.zhilian.ui.components.ZhilianCard
 import kotlinx.coroutines.launch
 
 /**
@@ -109,7 +108,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
         ) {
             items(filtered, key = { it.questionId }) { q ->
-                Card(
+                ZhilianCard(
                     modifier = Modifier.fillMaxWidth().clickable { detail = q },
                     border = if (q.isWrong) {
                         BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))

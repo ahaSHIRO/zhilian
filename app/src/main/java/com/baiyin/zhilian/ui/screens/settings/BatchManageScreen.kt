@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +36,7 @@ import com.baiyin.zhilian.data.batch.BatchFileDto
 import com.baiyin.zhilian.data.batch.BatchImportService
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.ImportOutcome
+import com.baiyin.zhilian.ui.components.ZhilianCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -110,7 +109,7 @@ fun BatchManageScreen(
         if (pendingDuplicates.isNotEmpty()) {
             Text(stringResource(R.string.batch_pending_duplicates), style = MaterialTheme.typography.titleMedium)
             pendingDuplicates.forEach { item ->
-                Card {
+                ZhilianCard {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             stringResource(R.string.batch_duplicate_with, item.existingQuestionId.take(8)),
@@ -150,9 +149,9 @@ fun BatchManageScreen(
                     val processed = preview?.let { p ->
                         processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
                     } == true
-                    Card(
-                        colors = if (processed) CardDefaults.cardColors()
-                        else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    ZhilianCard(
+                        containerColor = if (processed) MaterialTheme.colorScheme.surface
+                        else MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -204,7 +203,7 @@ fun BatchManageScreen(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(processedBatches, key = { it.batchId }) { b ->
-                Card {
+                ZhilianCard {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),

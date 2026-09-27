@@ -2,7 +2,6 @@ package com.baiyin.zhilian.ui.screens.practice
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,12 +22,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +54,8 @@ import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.practice.SubmitSummary
 import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
+import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.components.ZhilianOptionRow
 import kotlinx.coroutines.launch
 
 /** 单题提交结果（就地反馈与内联解析依据） */
@@ -240,10 +238,8 @@ private fun QuestionCard(
     }
     val revealed = result != null
 
-    Card(
+    ZhilianCard(
         modifier = modifier.fillMaxSize(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier
@@ -261,26 +257,18 @@ private fun QuestionCard(
                     options.forEach { option ->
                         val selected = (userAnswer as? UserAnswer.Single)?.optionId == option.optionId
                         val isCorrect = option.optionId in correctOptionIds
-                        Card(
+                        ZhilianOptionRow(
+                            selected = selected,
+                            revealed = revealed,
+                            isCorrect = isCorrect,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(selected = selected, enabled = !revealed) {
                                     onAnswerChange(UserAnswer.Single(option.optionId))
                                 },
-                            border = BorderStroke(
-                                1.dp,
-                                when {
-                                    revealed && isCorrect -> MaterialTheme.colorScheme.primary
-                                    revealed && selected && !isCorrect -> MaterialTheme.colorScheme.error
-                                    selected -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.outlineVariant
-                                },
-                            ),
                         ) {
-                            Row(modifier = Modifier.padding(12.dp)) {
-                                Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                                QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                            }
+                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -288,7 +276,10 @@ private fun QuestionCard(
                     options.forEach { option ->
                         val checked = (userAnswer as? UserAnswer.Multiple)?.optionIds?.contains(option.optionId) == true
                         val isCorrect = option.optionId in correctOptionIds
-                        Card(
+                        ZhilianOptionRow(
+                            selected = checked,
+                            revealed = revealed,
+                            isCorrect = isCorrect,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .toggleable(value = checked, enabled = !revealed) {
@@ -300,20 +291,9 @@ private fun QuestionCard(
                                         )
                                     )
                                 },
-                            border = BorderStroke(
-                                1.dp,
-                                when {
-                                    revealed && isCorrect -> MaterialTheme.colorScheme.primary
-                                    revealed && checked && !isCorrect -> MaterialTheme.colorScheme.error
-                                    checked -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.outlineVariant
-                                },
-                            ),
                         ) {
-                            Row(modifier = Modifier.padding(12.dp)) {
-                                Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                                QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                            }
+                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -325,32 +305,25 @@ private fun QuestionCard(
                         ).forEach { (label, value) ->
                             val selected = (userAnswer as? UserAnswer.TrueFalse)?.value == value
                             val isCorrect = revealed && value == trueFalseAnswer
-                            val isSelectedWrong = revealed && selected && value != trueFalseAnswer
-                            Card(
+                            ZhilianOptionRow(
+                                selected = selected,
+                                revealed = revealed,
+                                isCorrect = isCorrect,
                                 modifier = Modifier
                                     .weight(1f)
                                     .selectable(selected = selected, enabled = !revealed) {
                                         onAnswerChange(UserAnswer.TrueFalse(value))
                                     },
-                                colors = if (selected || isCorrect) {
-                                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                                containerColor = if (selected || isCorrect) {
+                                    MaterialTheme.colorScheme.secondaryContainer
                                 } else {
-                                    CardDefaults.cardColors()
+                                    MaterialTheme.colorScheme.surface
                                 },
-                                border = BorderStroke(
-                                    1.dp,
-                                    when {
-                                        isCorrect -> MaterialTheme.colorScheme.primary
-                                        isSelectedWrong -> MaterialTheme.colorScheme.error
-                                        selected -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.outlineVariant
-                                    },
-                                ),
                             ) {
                                 Text(
                                     label,
                                     style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    modifier = Modifier.padding(4.dp).fillMaxWidth(),
                                 )
                             }
                         }
@@ -438,10 +411,8 @@ private fun SummaryCard(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    ZhilianCard(
         modifier = modifier.fillMaxSize(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier
