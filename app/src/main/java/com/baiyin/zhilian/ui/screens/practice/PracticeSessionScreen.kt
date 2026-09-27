@@ -1,30 +1,37 @@
 package com.baiyin.zhilian.ui.screens.practice
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,11 +60,16 @@ import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import kotlinx.coroutines.launch
 
+/** 单题提交结果（就地反馈与内联解析依据） */
+private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
+
 /**
- * 练习会话：一题一屏；首版退出不恢复（README），已提交作答保留在库中。
- * 状态全部为会话内存态，不使用 ViewModel（会话无存活必要）。
+ * 练习会话：一题一卡的卡片流（ADR-0003）。
+ * - HorizontalPager 左右滑动切题，peek 露边暗示；滑动纯导航，未提交可滑回修改
+ * - 提交后就地高亮 + 卡片内联展开解析（弹层废弃）
+ * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 完成）
+ * - 首版退出不恢复会话（README），已提交作答保留在库中
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeSessionScreen(
     container: AppContainer,
@@ -65,11 +78,13 @@ fun PracticeSessionScreen(
     modifier: Modifier = Modifier,
 ) {
     var questions by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
-    var index by remember { mutableIntStateOf(0) }
-    var answeredCount by remember { mutableIntStateOf(0) }
-    var perfectCount by remember { mutableIntStateOf(0) }
-    var skippedCount by remember { mutableIntStateOf(0) }
-    var finished by remember { mutableStateOf(false) }
+    /** 未提交的当前作答（按题索引） */
+    val answers = remember { mutableStateMapOf<Int, UserAnswer>() }
+    /** 已提交结果（按题索引）；存在即该卡为只读反馈态 */
+    val submitted = remember { mutableStateMapOf<Int, SubmitResult>() }
+    /** 点过跳过且未作答的题索引（作答后移除） */
+    val skipped = remember { mutableStateMapOf<Int, Boolean>() }
+    var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
         questions = if (questionIds.isEmpty()) {
@@ -80,43 +95,11 @@ fun PracticeSessionScreen(
     }
 
     val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(pageCount = { questions.size + 1 })
 
-    // 每题状态（切题即重置）
-    var answer by remember(index) { mutableStateOf<UserAnswer?>(null) }
-    var revealed by remember(index) { mutableStateOf(false) }
-    var lastScore by remember(index) { mutableStateOf(0.0) }
-    var lastPerfect by remember(index) { mutableStateOf(false) }
-    var sheetShown by remember(index) { mutableStateOf(false) }
-    var confirmExit by remember { mutableStateOf(false) }
+    BackHandler { confirmExit = true }
 
-    val question = questions.getOrNull(index)
-
-    // 退出确认：练习中退出不恢复会话（README），已提交作答保留
-    BackHandler(enabled = !finished) { confirmExit = true }
-
-    if (finished) {
-        Column(
-            modifier = modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(stringResource(R.string.session_summary_title), style = MaterialTheme.typography.titleLarge)
-            Text(
-                stringResource(
-                    R.string.session_summary_body,
-                    answeredCount, perfectCount, skippedCount,
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
-            Button(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.session_done))
-            }
-        }
-        return
-    }
-
-    if (question == null) {
+    if (questions.isEmpty()) {
         Column(
             modifier = modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Center,
@@ -141,10 +124,88 @@ fun PracticeSessionScreen(
         )
     }
 
+    val pageCount = questions.size + 1
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(vertical = 8.dp),
+    ) {
+        // 固定进度区（卡片外顶部）
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Text(
+                stringResource(R.string.session_progress, (pagerState.currentPage + 1).coerceAtMost(pageCount), pageCount),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { (pagerState.currentPage + 1f) / pageCount },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
+        }
+
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            pageSpacing = 16.dp,
+        ) { page ->
+            if (page == questions.size) {
+                SummaryCard(
+                    answered = submitted.size,
+                    perfect = submitted.values.count { it.perfect },
+                    skippedCount = skipped.size,
+                    questionCount = questions.size,
+                    firstUnansweredIndex = questions.indices.firstOrNull { it !in submitted },
+                    onJumpToUnanswered = { index ->
+                        scope.launch { pagerState.animateScrollToPage(index) }
+                    },
+                    onExit = onExit,
+                )
+            } else {
+                QuestionCard(
+                    question = questions[page],
+                    pageLabel = stringResource(R.string.session_progress, page + 1, questions.size),
+                    userAnswer = answers[page],
+                    result = submitted[page],
+                    isSkipped = skipped.containsKey(page),
+                    onAnswerChange = { answers[page] = it },
+                    onSubmit = {
+                        val userAnswer = answers[page]
+                        if (userAnswer != null) {
+                            scope.launch {
+                                val (rate, perfect) = Scoring.score(questions[page], userAnswer)
+                                container.practiceRepository.submitAnswer(questions[page], userAnswer, rate, perfect)
+                                submitted[page] = SubmitResult(rate, perfect)
+                                skipped.remove(page)
+                            }
+                        }
+                    },
+                    onSkip = { skipped[page] = true },
+                )
+            }
+        }
+    }
+}
+
+/** 单张题卡：题干 + 作答区 + 操作行（跳过/提交）+ 提交后内联解析 */
+@Composable
+private fun QuestionCard(
+    question: QuestionEntity,
+    pageLabel: String,
+    userAnswer: UserAnswer?,
+    result: SubmitResult?,
+    isSkipped: Boolean,
+    onAnswerChange: (UserAnswer) -> Unit,
+    onSubmit: () -> Unit,
+    onSkip: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val options: List<OptionRow> = remember(question) {
         question.optionsJson?.let {
-            runCatching { BatchJson.json.decodeFromString<List<OptionDto>>(it) }
-                .getOrNull()
+            runCatching { BatchJson.json.decodeFromString<List<OptionDto>>(it) }.getOrNull()
         }?.map { OptionRow(it.optionId, it.text) } ?: emptyList()
     }
     val correctOptionIds: Set<String> = remember(question) {
@@ -169,223 +230,241 @@ fun PracticeSessionScreen(
             runCatching { BatchJson.json.decodeFromString<Boolean>(question.answerJson) }.getOrDefault(false)
         } else false
     }
+    val revealed = result != null
 
-    fun submit() {
-        val userAnswer = answer ?: return
-        val (scoreRate, perfect) = Scoring.score(question, userAnswer)
-        scope.launch {
-            container.practiceRepository.submitAnswer(question, userAnswer, scoreRate, perfect)
-            answeredCount++
-            if (perfect) perfectCount++
-            lastScore = scoreRate
-            lastPerfect = perfect
-            revealed = true
-            sheetShown = true
-        }
-    }
-
-    fun advance() {
-        val next = index + 1
-        if (next < questions.size) index = next else finished = true
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    Card(
+        modifier = modifier.fillMaxSize(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Text(
-            stringResource(R.string.session_progress, index + 1, questions.size),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        QuestionMarkdown(content = question.stem)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(pageLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            QuestionMarkdown(content = question.stem)
 
-        when (question.type) {
-            "single_choice" -> {
-                options.forEach { option ->
-                    val selected = (answer as? UserAnswer.Single)?.optionId == option.optionId
-                    val isCorrect = option.optionId in correctOptionIds
-                    val borderColor = when {
-                        revealed && isCorrect -> MaterialTheme.colorScheme.primary
-                        revealed && selected && !isCorrect -> MaterialTheme.colorScheme.error
-                        selected -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.outlineVariant
-                    }
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(selected = selected, enabled = !revealed) {
-                                answer = UserAnswer.Single(option.optionId)
-                            },
-                        border = BorderStroke(1.dp, borderColor),
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp)) {
-                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-            "multiple_choice" -> {
-                options.forEach { option ->
-                    val checked = (answer as? UserAnswer.Multiple)?.optionIds?.contains(option.optionId) == true
-                    val isCorrect = option.optionId in correctOptionIds
-                    val borderColor = when {
-                        revealed && isCorrect -> MaterialTheme.colorScheme.primary
-                        revealed && checked && !isCorrect -> MaterialTheme.colorScheme.error
-                        checked -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.outlineVariant
-                    }
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(value = checked, enabled = !revealed) {
-                                val current = (answer as? UserAnswer.Multiple)?.optionIds ?: emptySet()
-                                answer = UserAnswer.Multiple(
-                                    if (option.optionId in current) current - option.optionId
-                                    else current + option.optionId
-                                )
-                            },
-                        border = BorderStroke(1.dp, borderColor),
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp)) {
-                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-            "true_false" -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    listOf(
-                        stringResource(R.string.tf_true) to true,
-                        stringResource(R.string.tf_false) to false,
-                    ).forEach { (label, value) ->
-                        val selected = (answer as? UserAnswer.TrueFalse)?.value == value
-                        val isCorrect = revealed && value == trueFalseAnswer
-                        val isSelectedWrong = revealed && selected && value != trueFalseAnswer
+            when (question.type) {
+                "single_choice" -> {
+                    options.forEach { option ->
+                        val selected = (userAnswer as? UserAnswer.Single)?.optionId == option.optionId
+                        val isCorrect = option.optionId in correctOptionIds
                         Card(
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .selectable(selected = selected, enabled = !revealed) {
-                                    answer = UserAnswer.TrueFalse(value)
+                                    onAnswerChange(UserAnswer.Single(option.optionId))
                                 },
-                            colors = if (selected || isCorrect) {
-                                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                            } else {
-                                CardDefaults.cardColors()
-                            },
                             border = BorderStroke(
                                 1.dp,
                                 when {
-                                    isCorrect -> MaterialTheme.colorScheme.primary
-                                    isSelectedWrong -> MaterialTheme.colorScheme.error
+                                    revealed && isCorrect -> MaterialTheme.colorScheme.primary
+                                    revealed && selected && !isCorrect -> MaterialTheme.colorScheme.error
                                     selected -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.outlineVariant
                                 },
                             ),
                         ) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            )
+                            Row(modifier = Modifier.padding(12.dp)) {
+                                Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+                                QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
-            }
-            "fill_in_blank" -> {
-                var text by remember(index) { mutableStateOf((answer as? UserAnswer.Blank)?.text ?: "") }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = {
-                        text = it
-                        answer = UserAnswer.Blank(it)
-                    },
-                    enabled = !revealed,
-                    label = { Text(stringResource(R.string.blank_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (revealed) {
-                    Text(
-                        stringResource(R.string.blank_acceptable, blankAcceptable.joinToString(" / ")),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "multiple_choice" -> {
+                    options.forEach { option ->
+                        val checked = (userAnswer as? UserAnswer.Multiple)?.optionIds?.contains(option.optionId) == true
+                        val isCorrect = option.optionId in correctOptionIds
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(value = checked, enabled = !revealed) {
+                                    val current = (userAnswer as? UserAnswer.Multiple)?.optionIds ?: emptySet()
+                                    onAnswerChange(
+                                        UserAnswer.Multiple(
+                                            if (option.optionId in current) current - option.optionId
+                                            else current + option.optionId
+                                        )
+                                    )
+                                },
+                            border = BorderStroke(
+                                1.dp,
+                                when {
+                                    revealed && isCorrect -> MaterialTheme.colorScheme.primary
+                                    revealed && checked && !isCorrect -> MaterialTheme.colorScheme.error
+                                    checked -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.outlineVariant
+                                },
+                            ),
+                        ) {
+                            Row(modifier = Modifier.padding(12.dp)) {
+                                Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+                                QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+                "true_false" -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        listOf(
+                            stringResource(R.string.tf_true) to true,
+                            stringResource(R.string.tf_false) to false,
+                        ).forEach { (label, value) ->
+                            val selected = (userAnswer as? UserAnswer.TrueFalse)?.value == value
+                            val isCorrect = revealed && value == trueFalseAnswer
+                            val isSelectedWrong = revealed && selected && value != trueFalseAnswer
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .selectable(selected = selected, enabled = !revealed) {
+                                        onAnswerChange(UserAnswer.TrueFalse(value))
+                                    },
+                                colors = if (selected || isCorrect) {
+                                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                                } else {
+                                    CardDefaults.cardColors()
+                                },
+                                border = BorderStroke(
+                                    1.dp,
+                                    when {
+                                        isCorrect -> MaterialTheme.colorScheme.primary
+                                        isSelectedWrong -> MaterialTheme.colorScheme.error
+                                        selected -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.outlineVariant
+                                    },
+                                ),
+                            ) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                }
+                "fill_in_blank" -> {
+                    OutlinedTextField(
+                        value = (userAnswer as? UserAnswer.Blank)?.text ?: "",
+                        onValueChange = { onAnswerChange(UserAnswer.Blank(it)) },
+                        enabled = !revealed,
+                        label = { Text(stringResource(R.string.blank_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    if (revealed) {
+                        Text(
+                            stringResource(R.string.blank_acceptable, blankAcceptable.joinToString(" / ")),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        }
 
-        // 底部操作区：小白条 + 键盘双避让（edge-to-edge 规范）
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (!revealed) {
-                OutlinedButton(onClick = {
-                    skippedCount++
-                    advance()
-                }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.session_skip))
-                }
-                Button(
-                    onClick = { submit() },
-                    enabled = answer != null &&
-                        (question.type != "multiple_choice" ||
-                            (answer as? UserAnswer.Multiple)?.optionIds?.isNotEmpty() == true),
-                    modifier = Modifier.weight(2f),
-                ) {
-                    Text(stringResource(R.string.session_submit))
-                }
-            } else {
+            if (isSkipped && !revealed) {
                 Text(
-                    when {
-                        lastPerfect -> stringResource(R.string.session_perfect)
-                        lastScore > 0 -> stringResource(R.string.session_partial, (lastScore * 100).toInt())
-                        else -> stringResource(R.string.session_wrong)
-                    },
-                    color = if (lastPerfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+                    stringResource(R.string.session_skipped_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Button(onClick = { advance() }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.session_next))
+            }
+
+            // 操作行：未提交时 跳过 + 提交；提交后由解析区替换
+            if (!revealed) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(onClick = onSkip, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.session_skip))
+                    }
+                    Button(
+                        onClick = onSubmit,
+                        enabled = userAnswer != null &&
+                            (question.type != "multiple_choice" ||
+                                (userAnswer as? UserAnswer.Multiple)?.optionIds?.isNotEmpty() == true),
+                        modifier = Modifier.weight(2f),
+                    ) {
+                        Text(stringResource(R.string.session_submit))
+                    }
+                }
+            }
+
+            // 提交后：反馈横幅 + 内联解析（ADR-0003：弹层废弃）
+            AnimatedVisibility(visible = revealed) {
+                val r = result
+                if (r != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            when {
+                                r.perfect -> stringResource(R.string.session_perfect)
+                                r.scoreRate > 0 -> stringResource(R.string.session_partial, (r.scoreRate * 100).toInt())
+                                else -> stringResource(R.string.session_wrong)
+                            },
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (r.perfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
+                        QuestionMarkdown(content = question.explanation)
+                        SourceLine(question)
+                    }
                 }
             }
         }
     }
+}
 
-    // 解析弹层（ADR-0002：就地高亮 + 底部解析弹层）
-    if (sheetShown) {
-        ModalBottomSheet(onDismissRequest = { sheetShown = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+/** 结尾卡：会话小结 + 未答完提醒 + 完成退出（ADR-0003） */
+@Composable
+private fun SummaryCard(
+    answered: Int,
+    perfect: Int,
+    skippedCount: Int,
+    questionCount: Int,
+    firstUnansweredIndex: Int?,
+    onJumpToUnanswered: (Int) -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxSize(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(R.string.session_summary_title), style = MaterialTheme.typography.headlineSmall)
+            Text(
+                stringResource(R.string.session_summary_body, answered, perfect, skippedCount),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(vertical = 16.dp),
+            )
+            if (firstUnansweredIndex != null) {
                 Text(
-                    when {
-                        lastPerfect -> stringResource(R.string.session_perfect)
-                        lastScore > 0 -> stringResource(R.string.session_partial, (lastScore * 100).toInt())
-                        else -> stringResource(R.string.session_wrong)
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = if (lastPerfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    stringResource(R.string.session_unfinished_hint, questionCount - answered),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
                 )
-                QuestionMarkdown(content = question.explanation)
-                SourceLine(question)
-                TextButton(
-                    onClick = { sheetShown = false },
-                    modifier = Modifier.padding(bottom = 24.dp),
-                ) { Text(stringResource(R.string.session_close_sheet)) }
+                Button(
+                    onClick = { onJumpToUnanswered(firstUnansweredIndex) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                ) {
+                    Text(stringResource(R.string.session_jump_unanswered))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Button(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.session_done))
             }
         }
     }
