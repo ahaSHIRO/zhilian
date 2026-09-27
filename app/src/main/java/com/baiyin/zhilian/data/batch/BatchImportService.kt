@@ -12,10 +12,12 @@ import com.baiyin.zhilian.data.db.QuestionDao
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.db.ZhilianDatabase
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import java.text.Normalizer
 
 /** 单条导入问题（跳过/失败原因），展示与持久化两用 */
+@Serializable
 data class BatchIssue(val questionId: String, val reason: String)
 
 /** 疑似重复候选：新题与库内既有题 ID 相同题干（规格 v1 的判定方法） */
@@ -44,6 +46,8 @@ sealed class ImportOutcome {
         val failedCount: Int,
         val retiredCount: Int,
         val issues: List<BatchIssue>,
+        /** 无害提示（如停用 ID 不在库）：不计失败、不影响导入状态 */
+        val warnings: List<BatchIssue>,
         val duplicates: List<DuplicateCandidate>,
         val status: String, // IMPORTED / PARTIAL
     ) : ImportOutcome()
@@ -106,6 +110,7 @@ class BatchImportService(
         val now = System.currentTimeMillis()
         return db.withTransaction {
             val issues = mutableListOf<BatchIssue>()
+            val warnings = mutableListOf<BatchIssue>()
             val duplicates = mutableListOf<DuplicateCandidate>()
             val toInsert = mutableListOf<QuestionEntity>()
             var skipped = 0
@@ -136,11 +141,11 @@ class BatchImportService(
 
             if (toInsert.isNotEmpty()) questionDao.insertAll(toInsert)
 
-            // 停用（幂等）；指向不存在题目的停用仅记录提示
+            // 停用（幂等）；指向不存在题目的停用仅记入提示，不计失败、不影响导入状态
             val existingRetired = questionDao.existingIds(batch.retiredQuestionIds)
             val missingRetired = batch.retiredQuestionIds - existingRetired.toSet()
             if (existingRetired.isNotEmpty()) questionDao.markInactive(existingRetired)
-            missingRetired.forEach { issues += BatchIssue(it, "停用的题目 ID 不在题库中，已忽略") }
+            missingRetired.forEach { warnings += BatchIssue(it, "停用的题目 ID 不在题库中，已忽略") }
 
             // 待决疑似重复持久化
             if (duplicates.isNotEmpty()) {
@@ -155,6 +160,7 @@ class BatchImportService(
                 })
             }
 
+            // failedCount 仅含真实校验失败（issues = 跳过 + 校验失败；停用提示走 warnings）
             val failedCount = issues.size - skipped
             val status = if (failedCount == 0 && duplicates.isEmpty()) "IMPORTED" else "PARTIAL"
             batchDao.upsert(
@@ -181,6 +187,7 @@ class BatchImportService(
                 failedCount = failedCount,
                 retiredCount = existingRetired.size,
                 issues = issues,
+                warnings = warnings,
                 duplicates = duplicates,
                 status = status,
             )

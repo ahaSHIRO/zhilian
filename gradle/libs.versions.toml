@@ -13,6 +13,7 @@ kotlinxCoroutines = "1.10.2"
 jsonSchemaValidator = "2.0.7"
 markdownRenderer = "0.45.0"
 documentFile = "1.0.1"
+junit = "4.13.2"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -35,6 +36,7 @@ markdown-renderer = { group = "com.mikepenz", name = "multiplatform-markdown-ren
 markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 markdown-renderer-code = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-code", version.ref = "markdownRenderer" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentFile" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

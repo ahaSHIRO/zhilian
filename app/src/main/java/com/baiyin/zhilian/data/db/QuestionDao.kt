@@ -41,6 +41,10 @@ interface QuestionDao {
     @RawQuery(observedEntities = [QuestionEntity::class])
     suspend fun rawForPractice(query: SupportSQLiteQuery): List<QuestionEntity>
 
+    /** 符合条件的题目计数（不受 LIMIT 影响；练习配置页预览用） */
+    @RawQuery
+    suspend fun countRaw(query: SupportSQLiteQuery): Int
+
     @Query("UPDATE questions SET favorite = :favorite WHERE question_id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)
 

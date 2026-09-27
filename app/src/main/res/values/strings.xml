@@ -101,5 +101,6 @@
     <string name="batch_result_failed">导入失败</string>
     <string name="batch_result_counts">导入 %1$d，跳过 %2$d，失败 %3$d，停用 %4$d。</string>
     <string name="batch_result_duplicates">另有 %1$d 道疑似重复待人工判定。</string>
+    <string name="batch_result_warnings">另有 %1$d 条提示（不影响导入）：</string>
     <string name="batch_result_more_issues">…以及 %1$d 条未展示。</string>
 </resources>

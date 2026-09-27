@@ -271,6 +271,20 @@ fun BatchManageScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
+                            if (outcome.warnings.isNotEmpty()) {
+                                Text(
+                                    stringResource(R.string.batch_result_warnings, outcome.warnings.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                outcome.warnings.forEach { warning ->
+                                    Text(
+                                        "· ${warning.questionId.take(8)}: ${warning.reason}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

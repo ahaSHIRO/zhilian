@@ -52,6 +52,13 @@ object Scoring {
         }
     }
 
+    /** (rate, perfect) → AnswerOutcome；跳过不产生记录、不进转移，故不经此 */
+    fun outcomeOf(rate: Double, perfect: Boolean): AnswerOutcome = when {
+        perfect -> AnswerOutcome.Perfect
+        rate <= 0.0 -> AnswerOutcome.Wrong
+        else -> AnswerOutcome.Partial // 0 < rate < 1，部分得分仍算未对
+    }
+
     /** 构造作答记录实体（isFirst 由调用方查询后传入） */
     fun toRecord(
         question: QuestionEntity,

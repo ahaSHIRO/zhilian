@@ -63,9 +63,9 @@ fun PracticeHomeScreen(
         limit = limit,
     )
 
-    // 实时预览符合条件的题数
-    LaunchedEffect(selectedCategories, onlyWrong, onlyFavorite, sequential, limit) {
-        matchedCount = container.practiceRepository.pickQuestions(currentFilter()).size
+    // 实时预览符合条件的题数（走计数接口，不受题量上限截断；与顺序/随机无关故不列入 key）
+    LaunchedEffect(selectedCategories, onlyWrong, onlyFavorite, limit) {
+        matchedCount = container.practiceRepository.countMatching(currentFilter())
     }
 
     Column(

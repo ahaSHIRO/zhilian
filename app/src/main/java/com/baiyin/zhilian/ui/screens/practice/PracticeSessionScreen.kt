@@ -55,7 +55,7 @@ import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.OptionDto
 import com.baiyin.zhilian.data.batch.SourceDto
 import com.baiyin.zhilian.data.db.QuestionEntity
-import com.baiyin.zhilian.data.practice.Scoring
+import com.baiyin.zhilian.data.practice.SubmitSummary
 import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import kotlinx.coroutines.launch
@@ -84,6 +84,8 @@ fun PracticeSessionScreen(
     val submitted = remember { mutableStateMapOf<Int, SubmitResult>() }
     /** 点过跳过且未作答的题索引（作答后移除） */
     val skipped = remember { mutableStateMapOf<Int, Boolean>() }
+    /** 提交进行中（按题索引）；防双击重复落库（ADR-0004） */
+    val submitting = remember { mutableStateMapOf<Int, Boolean>() }
     var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
@@ -171,15 +173,20 @@ fun PracticeSessionScreen(
                     userAnswer = answers[page],
                     result = submitted[page],
                     isSkipped = skipped.containsKey(page),
+                    isSubmitting = submitting[page] == true,
                     onAnswerChange = { answers[page] = it },
                     onSubmit = {
                         val userAnswer = answers[page]
-                        if (userAnswer != null) {
+                        if (userAnswer != null && submitting[page] != true) {
                             scope.launch {
-                                val (rate, perfect) = Scoring.score(questions[page], userAnswer)
-                                container.practiceRepository.submitAnswer(questions[page], userAnswer, rate, perfect)
-                                submitted[page] = SubmitResult(rate, perfect)
-                                skipped.remove(page)
+                                submitting[page] = true
+                                try {
+                                    val summary = container.practiceRepository.submitAnswer(questions[page], userAnswer)
+                                    submitted[page] = SubmitResult(summary.rate, summary.perfect)
+                                    skipped.remove(page)
+                                } finally {
+                                    submitting[page] = false
+                                }
                             }
                         }
                     },
@@ -198,6 +205,7 @@ private fun QuestionCard(
     userAnswer: UserAnswer?,
     result: SubmitResult?,
     isSkipped: Boolean,
+    isSubmitting: Boolean,
     onAnswerChange: (UserAnswer) -> Unit,
     onSubmit: () -> Unit,
     onSkip: () -> Unit,
@@ -385,7 +393,7 @@ private fun QuestionCard(
                     }
                     Button(
                         onClick = onSubmit,
-                        enabled = userAnswer != null &&
+                        enabled = !isSubmitting && userAnswer != null &&
                             (question.type != "multiple_choice" ||
                                 (userAnswer as? UserAnswer.Multiple)?.optionIds?.isNotEmpty() == true),
                         modifier = Modifier.weight(2f),
