@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 单 Activity 启动主题（浅色）；夜间变体见 values-night/themes.xml。
+         系统栏沉浸由 MainActivity 中 enableEdgeToEdge() 统一开启，见 docs/conventions/edge-to-edge.md -->
+    <style name="Theme.Zhilian" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

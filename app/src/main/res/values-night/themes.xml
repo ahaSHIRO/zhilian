@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 夜间启动主题：深色窗口背景，避免深色模式下启动闪白 -->
+    <style name="Theme.Zhilian" parent="android:Theme.Material.NoActionBar" />
+</resources>
