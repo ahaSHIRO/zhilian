@@ -14,15 +14,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.baiyin.zhilian.data.SettingsRepository
+import androidx.navigation.navArgument
+import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.ui.screens.bank.BankScreen
-import com.baiyin.zhilian.ui.screens.practice.PracticeScreen
+import com.baiyin.zhilian.ui.screens.practice.PracticeHomeScreen
+import com.baiyin.zhilian.ui.screens.practice.PracticeSessionScreen
+import com.baiyin.zhilian.ui.screens.settings.BatchManageScreen
 import com.baiyin.zhilian.ui.screens.settings.SettingsScreen
 import com.baiyin.zhilian.ui.screens.stats.StatsScreen
+
+/** 子页面路由（不在底部导航显示） */
+const val ROUTE_PRACTICE_SESSION = "practice_session"
+const val ROUTE_BATCHES = "batches"
 
 /**
  * 单 Scaffold + 底部导航 + NavHost 的应用外壳。
@@ -31,44 +39,49 @@ import com.baiyin.zhilian.ui.screens.stats.StatsScreen
  */
 @Composable
 fun ZhilianApp(
-    settingsRepository: SettingsRepository,
+    container: AppContainer,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+    val showBottomBar = TopLevelDestination.entries.any { top ->
+        currentDestination?.hierarchy?.any { it.route == top.route } == true
+    }
 
     Scaffold(
         modifier = modifier,
         bottomBar = {
-            NavigationBar {
-                TopLevelDestination.entries.forEach { destination ->
-                    val selected = currentDestination?.hierarchy?.any {
-                        it.route == destination.route
-                    } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                // 单一级栈：回到起点再切目的地，保存/恢复各页状态
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (showBottomBar) {
+                NavigationBar {
+                    TopLevelDestination.entries.forEach { destination ->
+                        val selected = currentDestination?.hierarchy?.any {
+                            it.route == destination.route
+                        } == true
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    // 单一级栈：回到起点再切目的地，保存/恢复各页状态
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                painter = painterResource(
-                                    if (selected) destination.selectedIconRes
-                                    else destination.unselectedIconRes
-                                ),
-                                contentDescription = stringResource(destination.labelRes),
-                            )
-                        },
-                        label = { Text(stringResource(destination.labelRes)) },
-                    )
+                            },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(
+                                        if (selected) destination.selectedIconRes
+                                        else destination.unselectedIconRes
+                                    ),
+                                    contentDescription = stringResource(destination.labelRes),
+                                )
+                            },
+                            label = { Text(stringResource(destination.labelRes)) },
+                        )
+                    }
                 }
             }
         },
@@ -78,11 +91,42 @@ fun ZhilianApp(
             startDestination = TopLevelDestination.PRACTICE.route,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(TopLevelDestination.PRACTICE.route) { PracticeScreen() }
-            composable(TopLevelDestination.BANK.route) { BankScreen() }
-            composable(TopLevelDestination.STATS.route) { StatsScreen() }
+            composable(TopLevelDestination.PRACTICE.route) {
+                PracticeHomeScreen(
+                    container = container,
+                    onStartPractice = { questionIds ->
+                        navController.currentBackStackEntry?.savedStateHandle?.set("questionIds", questionIds)
+                        navController.navigate(ROUTE_PRACTICE_SESSION)
+                    },
+                )
+            }
+            composable(TopLevelDestination.BANK.route) {
+                BankScreen(container = container)
+            }
+            composable(TopLevelDestination.STATS.route) {
+                StatsScreen(container = container)
+            }
             composable(TopLevelDestination.SETTINGS.route) {
-                SettingsScreen(settingsRepository = settingsRepository)
+                SettingsScreen(
+                    container = container,
+                    onOpenBatches = { navController.navigate(ROUTE_BATCHES) },
+                )
+            }
+            composable(ROUTE_PRACTICE_SESSION) {
+                // 题目 ID 由发起页 savedStateHandle 传递，经 NavController.previousBackStackEntry 读取（官方模式）
+                val questionIds = navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<List<String>>("questionIds").orEmpty()
+                PracticeSessionScreen(
+                    container = container,
+                    questionIds = questionIds,
+                    onExit = { navController.popBackStack() },
+                )
+            }
+            composable(ROUTE_BATCHES) {
+                BatchManageScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
     }

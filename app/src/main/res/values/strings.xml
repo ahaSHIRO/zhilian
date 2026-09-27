@@ -14,4 +14,89 @@
     <string name="theme_mode_follow_system">跟随系统</string>
     <string name="theme_mode_light">浅色</string>
     <string name="theme_mode_dark">深色</string>
+    <string name="settings_data">数据</string>
+    <string name="settings_batch_import">批次导入</string>
+    <string name="settings_batch_hint">选择 Syncthing 批次同步目录后，App 仅扫描该目录下的 JSON 批次文件。</string>
+
+    <!-- 练习配置 -->
+    <string name="practice_filter_category">分类</string>
+    <string name="practice_empty_bank">题库为空：先在「设置 → 批次导入」导入题目批次。</string>
+    <string name="practice_filter_scope">范围</string>
+    <string name="practice_scope_wrong">错题</string>
+    <string name="practice_scope_favorite">收藏</string>
+    <string name="practice_filter_order">顺序</string>
+    <string name="practice_order_sequential">顺序</string>
+    <string name="practice_order_random">随机</string>
+    <string name="practice_filter_limit">题量</string>
+    <string name="practice_matched_count">符合条件的题目：%1$d 道</string>
+    <string name="practice_start">开始练习</string>
+
+    <!-- 练习会话 -->
+    <string name="session_progress">第 %1$d / %2$d 题</string>
+    <string name="session_skip">跳过</string>
+    <string name="session_submit">提交</string>
+    <string name="session_next">下一题</string>
+    <string name="session_perfect">回答正确</string>
+    <string name="session_wrong">回答错误</string>
+    <string name="session_partial">部分正确（得分率 %1$d%%）</string>
+    <string name="session_close_sheet">继续</string>
+    <string name="session_exit_title">退出练习？</string>
+    <string name="session_exit_body">当前练习进度不会恢复，已提交的作答会保留。</string>
+    <string name="session_exit_confirm">退出</string>
+    <string name="session_summary_title">练习完成</string>
+    <string name="session_summary_body">作答 %1$d 题，答对 %2$d 题，跳过 %3$d 题。</string>
+    <string name="session_done">完成</string>
+    <string name="blank_hint">填写答案</string>
+    <string name="blank_acceptable">可接受答案：%1$s</string>
+    <string name="tf_true">正确</string>
+    <string name="tf_false">错误</string>
+    <string name="source_prefix">来源：</string>
+    <string name="cancel">取消</string>
+    <string name="ok">好的</string>
+    <string name="back">返回</string>
+
+    <!-- 题库 -->
+    <string name="bank_empty">没有符合条件的题目。</string>
+    <string name="badge_wrong">错题</string>
+    <string name="badge_favorite">★ 已收藏</string>
+    <string name="bank_detail_answer">答案</string>
+    <string name="bank_detail_explanation">解析</string>
+    <string name="favorite_add">收藏本题</string>
+    <string name="favorite_remove">取消收藏</string>
+
+    <!-- 统计 -->
+    <string name="stats_questions">题库题数</string>
+    <string name="stats_records">作答次数</string>
+    <string name="stats_first_accuracy">首次作答正确率</string>
+    <string name="stats_overall_accuracy">全部作答正确率</string>
+    <string name="stats_multi_perfect">多选全对率</string>
+    <string name="stats_avg_score">平均得分率</string>
+
+    <!-- 批次管理 -->
+    <string name="batch_pick_dir">选择批次目录</string>
+    <string name="batch_change_dir">更换目录</string>
+    <string name="batch_no_dir">尚未授权批次目录。请选择 Syncthing 同步的批次文件夹。</string>
+    <string name="batch_dir_files">目录中的批次文件</string>
+    <string name="batch_preview_line">顺序号 %1$d · 新题 %2$d · 停用 %3$d</string>
+    <string name="batch_preview_fail">无法解析（不是合法批次）</string>
+    <string name="batch_import_action">导入</string>
+    <string name="batch_pending_duplicates">待决疑似重复</string>
+    <string name="batch_duplicate_with">与已有题（%1$s…）题干相同</string>
+    <string name="batch_review_duplicate">人工判定</string>
+    <string name="batch_duplicate_new">待导入题</string>
+    <string name="batch_duplicate_existing">已有题</string>
+    <string name="batch_duplicate_import">导入</string>
+    <string name="batch_duplicate_skip">跳过</string>
+    <string name="batch_processed_title">已处理批次</string>
+    <string name="batch_processed_empty">还没有处理过批次。</string>
+    <string name="batch_processed_line">顺序号 %1$d · %2$s</string>
+    <string name="batch_processed_counts">导入 %1$d · 跳过 %2$d · 失败 %3$d · 待决 %4$d</string>
+    <string name="batch_status_imported">已导入</string>
+    <string name="batch_status_partial">部分成功</string>
+    <string name="batch_status_failed">失败</string>
+    <string name="batch_result_done">导入完成</string>
+    <string name="batch_result_failed">导入失败</string>
+    <string name="batch_result_counts">导入 %1$d，跳过 %2$d，失败 %3$d，停用 %4$d。</string>
+    <string name="batch_result_duplicates">另有 %1$d 道疑似重复待人工判定。</string>
+    <string name="batch_result_more_issues">…以及 %1$d 条未展示。</string>
 </resources>

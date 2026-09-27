@@ -5,37 +5,45 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
-import com.baiyin.zhilian.data.SettingsRepository
 import com.baiyin.zhilian.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
-/** 设置屏：首版仅深色模式三态开关（ADR-0002），后续批次导入入口也放这里。 */
+/**
+ * 设置屏：外观（深色模式三态，ADR-0002）+ 批次导入入口。
+ */
 @Composable
 fun SettingsScreen(
-    settingsRepository: SettingsRepository,
+    container: AppContainer,
+    onOpenBatches: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val themeMode by settingsRepository.themeMode
+    val themeMode by container.settingsRepository.themeMode
         .collectAsStateWithLifecycle(initialValue = ThemeMode.FOLLOW_SYSTEM)
     val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -52,7 +60,7 @@ fun SettingsScreen(
                 SegmentedButton(
                     selected = themeMode == mode,
                     onClick = {
-                        scope.launch { settingsRepository.setThemeMode(mode) }
+                        scope.launch { container.settingsRepository.setThemeMode(mode) }
                     },
                     shape = SegmentedButtonDefaults.itemShape(
                         index = index,
@@ -63,10 +71,25 @@ fun SettingsScreen(
                 }
             }
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        Text(
+            text = stringResource(R.string.settings_data),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        OutlinedButton(onClick = onOpenBatches, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.settings_batch_import))
+        }
+        Text(
+            text = stringResource(R.string.settings_batch_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
-private val ThemeMode.labelRes: Int
+internal val ThemeMode.labelRes: Int
     get() = when (this) {
         ThemeMode.FOLLOW_SYSTEM -> R.string.theme_mode_follow_system
         ThemeMode.LIGHT -> R.string.theme_mode_light
