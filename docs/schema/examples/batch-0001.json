@@ -1,0 +1,78 @@
+{
+  "formatVersion": 1,
+  "batchId": "7f3c9a52-8e21-4b7a-9c44-2f6d1e0a5b83",
+  "batchOrder": 1,
+  "createdAt": "2026-09-27",
+  "subject": "kotlin",
+  "questions": [
+    {
+      "questionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "type": "single_choice",
+      "category": "基础语法",
+      "tags": ["variables", "basics"],
+      "stem": "阅读以下代码：\n\n```kotlin\nval count = 3\ncount = 5\n```\n\n第二行会发生什么？",
+      "options": [
+        { "optionId": "A", "text": "编译错误：`val` 不能重新赋值" },
+        { "optionId": "B", "text": "编译通过，`count` 变为 5" },
+        { "optionId": "C", "text": "编译警告，运行时 `count` 变为 5" },
+        { "optionId": "D", "text": "运行时抛出 `IllegalStateException`" }
+      ],
+      "answer": "A",
+      "explanation": "`val` 声明只读引用，初始化后不能再次赋值，重新赋值会直接编译失败。需要可变状态应使用 `var`。",
+      "source": {
+        "title": "Kotlin 官方文档：Basic syntax",
+        "url": "https://kotlinlang.org/docs/basic-syntax.html",
+        "accessedDate": "2026-09-27"
+      }
+    },
+    {
+      "questionId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "type": "multiple_choice",
+      "category": "集合",
+      "tags": ["collections", "immutable"],
+      "stem": "下列哪些操作**不会**修改调用它的 `List` 本身？",
+      "options": [
+        { "optionId": "A", "text": "`list.plus(element)`" },
+        { "optionId": "B", "text": "`list.add(element)`（`MutableList`）" },
+        { "optionId": "C", "text": "`list.map { it }`" },
+        { "optionId": "D", "text": "`list.sorted()`" }
+      ],
+      "answer": ["A", "C", "D"],
+      "explanation": "Kotlin 的 `List` 接口只读，`plus`、`map`、`sorted` 都返回新集合，原列表不变；`add` 是 `MutableList` 的成员，会原地修改。",
+      "source": {
+        "title": "Kotlin 官方文档：Collections overview",
+        "url": "https://kotlinlang.org/docs/collections-overview.html",
+        "accessedDate": "2026-09-27"
+      }
+    },
+    {
+      "questionId": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+      "type": "true_false",
+      "category": "基础语法",
+      "tags": ["operators", "equality"],
+      "stem": "在 Kotlin 中，`==` 运算符等价于调用 `equals()` 方法进行比较。",
+      "answer": true,
+      "explanation": "Kotlin 的 `==` 被编译为 `equals()` 调用（内容相等）；引用相等使用 `===`。这与 Java 中 `==` 比较引用不同。",
+      "source": {
+        "title": "Kotlin 官方文档：Equality",
+        "url": "https://kotlinlang.org/docs/equality.html",
+        "accessedDate": "2026-09-27"
+      }
+    },
+    {
+      "questionId": "d4e5f6a7-b8c9-4d0e-8f1a-3b4c5d6e7f80",
+      "type": "fill_in_blank",
+      "category": "函数",
+      "tags": ["functions", "basics"],
+      "stem": "Kotlin 中声明一个函数使用的关键字是 ______。",
+      "acceptableAnswers": ["fun"],
+      "explanation": "函数声明语法为 `fun 函数名(参数): 返回类型 { ... }`，关键字为 `fun`。",
+      "source": {
+        "title": "Obsidian 笔记：Kotlin基础/函数与Lambda",
+        "note": "<本地 Obsidian 库>\\Kotlin基础\\函数与Lambda.md",
+        "accessedDate": "2026-09-26"
+      }
+    }
+  ],
+  "retiredQuestionIds": []
+}

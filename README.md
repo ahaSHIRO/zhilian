@@ -41,9 +41,9 @@
 ## 待实现时确认
 
 - 最低 Android API：主力机已核实为 Android 17（API 37，小米 25060RK16C）。发布定案 minSdk=37；当前工程 minSdk 暂保持 31（Material You 最低线）以兼容 MuMu 模拟器（Android 15）联调，发布前收回。
-- JSON Schema 的字段、枚举、约束和版本迁移策略。
-- 疑似重复判定方法、阈值及导入确认界面细节。
-- 科目/标签在同步批次中的身份和大小写规范。
+- JSON 批次格式已定案 v1（2026-09-27）：Schema 与规格见 docs/schema/（字段、枚举、约束、版本迁移策略、应用级校验清单）。出题端按此生成，App 导入前逐题校验。
+- 疑似重复判定：方法已定为题干 NFC+trim 归一化精确相同且 ID 不同（见 docs/schema/batch-spec-v1.md）；导入确认界面细节待实现时定。
+- 科目/标签身份规范已定案 v1：科目为 Schema 枚举小写代码（当前仅 kotlin）；分类名字即身份（科目内 NFC+trim 精确匹配）；标签建议全小写、区分大小写。
 - 第三方依赖核查（2026-09-27 已完成）：Markdown 渲染与代码高亮用 multiplatform-markdown-renderer（Apache-2.0，含 -m3/-code 模块，纯文字无需图片模块）；批次 JSON Schema 校验用 networknt json-schema-validator 2.x Android 兼容线（Apache-2.0）；JSON 解析用 kotlinx-serialization；Markwon/prism4j/compose-richtext 已核实排除（停更或 alpha）。均为 Apache-2.0/MIT，义务限于保留版权与 NOTICE。引入时以当时最新稳定版复核。
 
 ## 领域词汇
