@@ -89,4 +89,14 @@ class MasteryTest {
         assertEquals(2, m.consecutivePerfect)
         assertFalse(m.hasEverWrong && m.consecutivePerfect < 2) // 消解
     }
+
+    // ---- 清除练习记录后的掌握度复位（resetAllMastery 的语义） ----
+
+    @Test
+    fun reset_mastery_clears_wrong_status() {
+        // 清除记录后复位为初始掌握度：错题列表应随之清空
+        val reset = Mastery(consecutivePerfect = 0, hasEverWrong = false)
+        assertFalse(reset.hasEverWrong && reset.consecutivePerfect < 2) // 不再是错题
+        assertEquals(0, reset.consecutivePerfect)
+    }
 }

@@ -6,6 +6,7 @@ import com.baiyin.zhilian.data.db.QuestionEntity
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import java.text.Normalizer
 
 /** 用户作答（会话内存态） */
 sealed class UserAnswer {
@@ -18,9 +19,18 @@ sealed class UserAnswer {
 /** 练习判定（README 评分规则）。返回 null 表示尚未作答。 */
 object Scoring {
 
-    /** 填空匹配：去首尾空白 + 区分大小写精确比对（README） */
-    fun isBlankMatch(input: String, acceptable: List<String>): Boolean =
-        acceptable.any { it == input.trim() }
+    /**
+     * 填空匹配：Unicode NFC 归一化 + 去首尾空白后区分大小写精确比对。
+     * NFC 依据 batch-spec-v1.md「所有身份比对与填空匹配均在 NFC 规范化后进行」；
+     * 两侧同形归一，避免视觉相同但分解形式不同的字符被误判为错。
+     */
+    fun isBlankMatch(input: String, acceptable: List<String>): Boolean {
+        val normalized = normalizeBlank(input)
+        return acceptable.any { normalizeBlank(it) == normalized }
+    }
+
+    /** 填空匹配归一化：NFC + trim（与 BatchImportService.normalizeIdentity 同规则） */
+    fun normalizeBlank(s: String): String = Normalizer.normalize(s.trim(), Normalizer.Form.NFC)
 
     /**
      * 判定得分。多选：max(0, 正确选中数 − 错误选中数) / 正确选项总数，满分才算答对。

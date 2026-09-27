@@ -54,20 +54,20 @@ interface QuestionDao {
     @Query("UPDATE questions SET inactive = 1 WHERE question_id IN (:ids)")
     suspend fun markInactive(ids: List<String>)
 
+    /** 清除练习记录时复位全部题目掌握度（错题标记与连续全对计数）；收藏不受影响 */
+    @Query("UPDATE questions SET consecutive_perfect = 0, has_ever_wrong = 0")
+    suspend fun resetAllMastery()
+
     @Query("SELECT COUNT(*) FROM questions WHERE inactive = 0")
     fun observeActiveCount(): Flow<Int>
 
     // ---- 统计聚合（README：首次作答正确率 / 全部作答正确率 / 多选全对率 / 平均得分率） ----
 
-    @Query(
-        """
-        SELECT AVG(r.is_perfect) FROM answer_records r
-        JOIN (
-            SELECT question_id, MIN(answered_at) AS first_at
-            FROM answer_records GROUP BY question_id
-        ) f ON r.question_id = f.question_id AND r.answered_at = f.first_at
-        """
-    )
+    /**
+     * 首次作答正确率：以落库时写定的 is_first_attempt 列为准（单一真值源）。
+     * 不再用 MIN(answered_at) 子查询 JOIN 重算——那会与列分歧，且同毫秒双记录会重复计数。
+     */
+    @Query("SELECT AVG(is_perfect) FROM answer_records WHERE is_first_attempt = 1")
     suspend fun firstAttemptAccuracy(): Double?
 
     @Query("SELECT AVG(is_perfect) FROM answer_records")

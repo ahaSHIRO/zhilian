@@ -17,6 +17,12 @@
     <string name="settings_data">数据</string>
     <string name="settings_batch_import">批次导入</string>
     <string name="settings_batch_hint">选择 Syncthing 批次同步目录后，App 仅扫描该目录下的 JSON 批次文件。</string>
+    <string name="settings_clear_history">清除练习记录</string>
+    <string name="settings_clear_history_hint">清空全部作答记录，并复位错题标记与连续全对次数；题库与收藏不受影响。</string>
+    <string name="clear_history_confirm_title">清除练习记录？</string>
+    <string name="clear_history_confirm_body">将删除全部作答记录，并复位所有题目的错题标记与连续全对次数。题库与收藏不受影响，此操作不可撤销。</string>
+    <string name="clear_history_confirm_action">清除</string>
+    <string name="clear_history_done">练习记录已清除。</string>
 
     <!-- 练习配置 -->
     <string name="practice_filter_category">分类</string>

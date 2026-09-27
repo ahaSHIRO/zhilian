@@ -79,6 +79,20 @@ class PracticeRepository(private val db: ZhilianDatabase) {
             SubmitSummary(rate, perfect)
         }
 
+    /**
+     * 清除全部本机练习记录（README）。
+     *
+     * 单事务内清空作答记录 **并复位题目掌握度**：只删 answer_records 会让
+     * isWrong（has_ever_wrong && consecutive_perfect < 2）继续为真——错题列表非空
+     * 而统计页显示 0 条记录，状态与历史分裂。收藏不属于练习记录，不复位。
+     */
+    suspend fun clearAllHistory() {
+        db.withTransaction {
+            db.answerRecordDao().deleteAll()
+            questionDao.resetAllMastery()
+        }
+    }
+
     // 统计（README 四项指标）
     suspend fun firstAttemptAccuracy() = questionDao.firstAttemptAccuracy()
     suspend fun overallAccuracy() = questionDao.overallAccuracy()

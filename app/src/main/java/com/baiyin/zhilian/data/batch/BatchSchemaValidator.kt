@@ -38,7 +38,8 @@ class BatchSchemaValidator(context: Context) {
         if (errors.isEmpty()) return null
         return errors.map { m ->
             SchemaIssue(
-                path = "$",
+                // 取真实实例路径（如 $.questions[2].answer），不再写死 "$" 丢失字段定位
+                path = m.instanceLocation.toString(),
                 message = translate(m.message),
             )
         }
