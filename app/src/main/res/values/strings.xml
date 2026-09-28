@@ -27,6 +27,8 @@
     <!-- 练习配置 -->
     <string name="practice_filter_subject">科目</string>
     <string name="practice_filter_category">分类</string>
+    <string name="practice_filter_tag">标签</string>
+    <string name="practice_tag_hint">先选分类，可按标签进一步细筛。</string>
     <string name="practice_filter_type">题型</string>
     <string name="type_single_choice">单选</string>
     <string name="type_multiple_choice">多选</string>
@@ -36,6 +38,9 @@
     <string name="practice_filter_scope">范围</string>
     <string name="practice_scope_wrong">错题</string>
     <string name="practice_scope_favorite">收藏</string>
+    <!-- 范围 chip 带预判计数：勾选前就能判断这次值不值得刷 -->
+    <string name="practice_scope_wrong_count">错题 %1$d</string>
+    <string name="practice_scope_favorite_count">收藏 %1$d</string>
     <string name="practice_filter_order">顺序</string>
     <string name="practice_order_sequential">顺序</string>
     <string name="practice_order_random">随机</string>

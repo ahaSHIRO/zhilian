@@ -1,5 +1,6 @@
 package com.baiyin.zhilian.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -7,6 +8,18 @@ import androidx.room.Query
 import androidx.room.RawQuery
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * 标签筛选用的轻量投影：只取 question_id 与 tags_json 两列。
+ *
+ * 标签以 JSON 数组字符串存在一列里，用 SQL 条件表达"含某标签"并不可靠
+ * （详见 PracticeRepository.matchesTags），故先取此投影在内存过滤，
+ * 避免为了几个标签把题干、解析等整行实体全部拉进内存。
+ */
+data class QuestionTagRow(
+    @ColumnInfo(name = "question_id") val questionId: String,
+    @ColumnInfo(name = "tags_json") val tagsJson: String,
+)
 
 @Dao
 interface QuestionDao {
@@ -50,6 +63,10 @@ interface QuestionDao {
      */
     @RawQuery
     suspend fun rawForStrings(query: SupportSQLiteQuery): List<String>
+
+    /** 标签筛选的两列投影（见 [QuestionTagRow]）；whereSql 由调用方用受控常量拼装 */
+    @RawQuery
+    suspend fun rawForTagRows(query: SupportSQLiteQuery): List<QuestionTagRow>
 
     @Query("UPDATE questions SET favorite = :favorite WHERE question_id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)

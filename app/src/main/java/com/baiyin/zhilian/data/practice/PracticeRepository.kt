@@ -4,16 +4,22 @@ import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.baiyin.zhilian.data.db.QuestionDao
 import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.db.QuestionTagRow
 import com.baiyin.zhilian.data.db.ZhilianDatabase
 
 /**
  * 练习筛选条件（README：条件组合 = 全部满足；顺序模式按批次顺序号与文件内顺序）。
  * 空集合一律表示"不限该维度"。
+ *
+ * 维度间一律取交集（AND）；**同一维度内多选取并集（OR）**——
+ * 科目/分类/题型/标签都是"选 A 和 B = 刷 A 或 B"。唯一例外是范围维度：
+ * 错题与收藏是两个独立开关，同时打开表示"既答错过、又被收藏"，即取交集。
  */
 data class PracticeFilter(
     val subjects: Set<String> = emptySet(), // 空 = 不限科目（kotlin / java）
     val categories: Set<String> = emptySet(), // 空 = 不限分类
     val types: Set<String> = emptySet(), // 空 = 不限题型（single_choice 等）
+    val tags: Set<String> = emptySet(), // 空 = 不限标签；比分类更细粒度，取并集
     val onlyWrong: Boolean = false,
     val onlyFavorite: Boolean = false,
     val sequential: Boolean = true,
@@ -43,16 +49,38 @@ class PracticeRepository(private val db: ZhilianDatabase) {
     }.joinToString(" AND ")
 
     suspend fun pickQuestions(filter: PracticeFilter): List<QuestionEntity> {
-        val order = if (filter.sequential) "batch_order, order_in_batch" else "RANDOM()"
-        val sql = "SELECT * FROM questions WHERE ${buildWhere(filter)} ORDER BY $order LIMIT ${filter.limit}"
-        return questionDao.rawForPractice(SimpleSQLiteQuery(sql))
+        // 未选标签时走原路径：SQL 直接 LIMIT，不为低频路径付出全表扫描的代价
+        if (filter.tags.isEmpty()) {
+            val order = if (filter.sequential) "batch_order, order_in_batch" else "RANDOM()"
+            val sql = "SELECT * FROM questions WHERE ${buildWhere(filter)} ORDER BY $order LIMIT ${filter.limit}"
+            return questionDao.rawForPractice(SimpleSQLiteQuery(sql))
+        }
+        val picked = tagRows(filter).filter { QuestionTags.matches(it.tagsJson, filter.tags) }
+        val ids = (if (filter.sequential) picked else picked.shuffled())
+            .take(filter.limit).map { it.questionId }
+        // getByIds 按批次序返回，随机模式下须按打乱后的顺序重排，否则顺序练习以外一律退化为顺序
+        val byId = questionDao.getByIds(ids).associateBy { it.questionId }
+        return ids.mapNotNull { byId[it] }
     }
 
     /** 符合条件的题目总数（不受 limit 截断；练习配置页预览用） */
     suspend fun countMatching(filter: PracticeFilter): Int {
-        val sql = "SELECT COUNT(*) FROM questions WHERE ${buildWhere(filter)}"
-        return questionDao.countRaw(SimpleSQLiteQuery(sql))
+        if (filter.tags.isEmpty()) {
+            val sql = "SELECT COUNT(*) FROM questions WHERE ${buildWhere(filter)}"
+            return questionDao.countRaw(SimpleSQLiteQuery(sql))
+        }
+        return tagRows(filter).count { QuestionTags.matches(it.tagsJson, filter.tags) }
     }
+
+    /**
+     * 范围 chip 上的预判计数：假设只打开该范围、其余条件不变时能刷出几道。
+     * 让"错题"从盲开关变成可判断的入口——否则只能勾上之后看总数才知道值不值得刷。
+     */
+    suspend fun wrongCount(filter: PracticeFilter): Int =
+        countMatching(filter.copy(onlyWrong = true))
+
+    suspend fun favoriteCount(filter: PracticeFilter): Int =
+        countMatching(filter.copy(onlyFavorite = true))
 
     /** 题库中已有的科目（练习配置页科目 chips） */
     suspend fun distinctSubjects(): List<String> =
@@ -71,6 +99,32 @@ class PracticeRepository(private val db: ZhilianDatabase) {
             "SELECT DISTINCT category FROM questions WHERE $where ORDER BY category"
         ))
     }
+
+    /**
+     * 给定科目与分类下已有的标签，二者任一为空表示不限该层。
+     *
+     * 标签比分类更细（同一科目的分类下常有 launch / async / mutex 等多个主题），
+     * 但存在 JSON 数组列里，取 DISTINCT 必须逐行解析；题库为个人规模，全表扫描可接受。
+     *
+     * 分类这一层不是多余的过滤：全库标签基数远高于分类（18 道题已产出 20+ 个标签），
+     * 不按分类收窄就会把配置页撑成两屏。先选分类、再用标签细筛，才是标签该出现的地方。
+     */
+    suspend fun distinctTags(subject: String?, categories: Set<String>): List<String> {
+        val conditions = mutableListOf("inactive = 0")
+        if (subject != null) conditions += "subject = '${subject.replace("'", "''")}'"
+        if (categories.isNotEmpty()) conditions += "category IN (${quote(categories)})"
+        return questionDao.rawForStrings(SimpleSQLiteQuery(
+            "SELECT tags_json FROM questions WHERE ${conditions.joinToString(" AND ")}"
+        )).let { QuestionTags.distinct(it) }
+    }
+
+    /**
+     * 标签筛选的两列投影（SQL 条件不含标签，标签在内存里判；判定见 [QuestionTags]）
+     */
+    private suspend fun tagRows(filter: PracticeFilter): List<QuestionTagRow> =
+        questionDao.rawForTagRows(SimpleSQLiteQuery(
+            "SELECT question_id, tags_json FROM questions WHERE ${buildWhere(filter)}"
+        ))
 
     /** 题库中已有的题型（按固定顺序返回，便于 UI 稳定排布） */
     suspend fun distinctTypes(): List<String> {
