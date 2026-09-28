@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -99,7 +100,12 @@ fun ZhilianApp(
 
     Scaffold(
         modifier = modifier,
+        // containerColor 透明是为了透出雾蓝背景层（BackgroundFog），但这会让
+        // contentColorFor(Transparent) 解析为 Unspecified，LocalContentColor 断链回落
+        // 到默认黑色——页面上所有未写显式颜色的裸 Text（各页 section 标题）会黑字。
+        // 必须显式给 contentColor 补回当前主题的 onSurface。
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
