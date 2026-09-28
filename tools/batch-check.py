@@ -151,10 +151,17 @@ def load_existing_batches(batches_dir, exclude_path):
 
 
 def validate_against_existing(batch, existing):
-    """应用级校验 6：batchOrder 不得与已导入批次重复；8：疑似重复提示"""
+    """跨批次核对（spec 清单 6：batchOrder 不重复；8：疑似重复提示）。
+
+    另覆盖清单 3 后半段的缺口：App 对与已导入题库重复的 questionId 是
+    静默跳过而非报错（README 导入韧性），整批同步过去却少几道题很难察觉，
+    故在电脑端提前拦下。
+    """
     my_order = batch.get("batchOrder")
+    questions = batch.get("questions") or []
+    my_ids = {q.get("questionId") for q in questions if q.get("questionId")}
     my_stems = {}
-    for q in batch.get("questions") or []:
+    for q in questions:
         stem = normalize_identity(q.get("stem") or "")
         if stem:
             my_stems.setdefault(stem, q.get("questionId"))
@@ -164,11 +171,16 @@ def validate_against_existing(batch, existing):
         if other.get("batchOrder") == my_order:
             err(f"[应用级] batchOrder {my_order} 与已有批次 {name} 重复"
                 f"（batchId {other.get('batchId')}）")
-        # 疑似重复：题干 NFC+trim 完全相同且 questionId 不同
         for q in other.get("questions") or []:
+            qid = q.get("questionId")
+            # 清单 3 后半段：ID 已在题库，App 导入时会跳过该题
+            if qid in my_ids:
+                err(f"[应用级] questionId {qid!r} 已存在于 {name}，"
+                    f"App 导入时会静默跳过该题——请换用新 ID 或从本批次移除")
+            # 疑似重复：题干 NFC+trim 完全相同且 questionId 不同
             stem = normalize_identity(q.get("stem") or "")
-            if stem and stem in my_stems and q.get("questionId") != my_stems[stem]:
-                warn(f"[应用级] 疑似重复：题 {my_stems[stem]} 与 {name} 的 {q.get('questionId')} "
+            if stem and stem in my_stems and qid != my_stems[stem]:
+                warn(f"[应用级] 疑似重复：题 {my_stems[stem]} 与 {name} 的 {qid} "
                      f"题干完全相同（ID 不同）")
 
 
@@ -221,7 +233,8 @@ def main():
         print(f"\n错误 {len(errors)} 条：")
         for e in errors:
             print(f"  x {e}")
-        print(f"\n结论：不通过（{len(errors)} 个错误）。App 会整批拒绝，请修正后重新校验。")
+        print(f"\n结论：不通过（{len(errors)} 个错误）。"
+              f"请修正后重新校验——整批拒绝或导入时静默跳题，都别等到手机端才发现。")
         sys.exit(1)
 
     n = len(batch.get("questions") or [])
