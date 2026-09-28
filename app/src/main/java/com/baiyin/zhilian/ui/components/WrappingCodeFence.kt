@@ -1,6 +1,5 @@
 package com.baiyin.zhilian.ui.components
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +14,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.LocalZhilianDarkTheme
 import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
 import com.mikepenz.markdown.compose.LocalMarkdownPadding
@@ -67,7 +67,9 @@ private fun WrappingHighlightedCode(
     val codeBlockPadding = LocalMarkdownPadding.current.codeBlock
 
     // 高亮构建是纯函数（非 @Composable），放到后台协程里做，避免大段代码阻塞组合
-    val darkTheme = isSystemInDarkTheme()
+    // 深浅态必须取 App 主题（LocalZhilianDarkTheme）而非系统：否则 App 深色 + 系统浅色时
+    // 会拿浅色调色板画在深色代码底上，token 近乎黑字（详见 Theme.kt 该 Local 的说明）
+    val darkTheme = LocalZhilianDarkTheme.current
     val highlights: AnnotatedString by produceState(
         initialValue = AnnotatedString(text = code),
         key1 = code,
