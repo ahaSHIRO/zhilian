@@ -203,7 +203,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 ## 六、硬约束速查（违反必被拒）
 
 - 首版**只追加**：不原位覆盖、不物理删除。修订 = **新 questionId**，旧题走 `retiredQuestionIds` 停用，且**停用不可恢复**
-- `subject` 枚举当前为 `kotlin` 与 `java`；要扩其他科目须改 Schema 与 App 侧适配
+- `subject` 枚举当前为 `kotlin`、`java` 与 `arkts`（ArkTS 为占位，暂无素材与题）；要扩其他科目须改 Schema 与 App 侧适配
 - 每批 `questions` **1–200** 题；`batchOrder` **1–9999** 且不得与已导入批次重复
 - 顶层 `additionalProperties: false`——**任何未定义字段都会导致整批校验失败**
 - `batchId` / `questionId` 为小写 UUID（`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`）

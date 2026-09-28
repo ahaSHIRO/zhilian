@@ -27,7 +27,7 @@
       "description": "批次创建日期，ISO 8601（YYYY-MM-DD）。"
     },
     "subject": {
-      "enum": ["kotlin", "java"],
+      "enum": ["kotlin", "java", "arkts"],
       "description": "科目代码，小写。扩科目需修改本 Schema 与 App 侧适配。"
     },
     "questions": {
