@@ -1,5 +1,14 @@
 package com.baiyin.zhilian.ui.navigation
 
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -11,7 +20,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -29,6 +40,45 @@ import com.baiyin.zhilian.ui.screens.stats.StatsScreen
 /** 子页面路由（不在底部导航显示） */
 const val ROUTE_PRACTICE_SESSION = "practice_session"
 const val ROUTE_BATCHES = "batches"
+
+/** tab 序号；非 tab 路由（会话页、批次管理页）返回 null */
+private fun tabIndex(route: String?): Int? =
+    TopLevelDestination.entries.firstOrNull { it.route == route }?.ordinal
+
+/** tab 间切换的内容进入：方向感知横滑（往右切从右进，往回切从左进），SharedAxisX 简化版 */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabSlideEnter(): EnterTransition? {
+    val from = tabIndex(initialState.destination.route) ?: return null
+    val to = tabIndex(targetState.destination.route) ?: return null
+    if (from == to) return null
+    return slideInHorizontally(tween(300)) { if (from < to) it / 4 else -it / 4 } +
+        fadeIn(tween(300))
+}
+
+/** tab 间切换的内容退出：与进入镜像，滑向相反方向的 1/4 处并淡出 */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabSlideExit(): ExitTransition? {
+    val from = tabIndex(initialState.destination.route) ?: return null
+    val to = tabIndex(targetState.destination.route) ?: return null
+    if (from == to) return null
+    return slideOutHorizontally(tween(300)) { if (from < to) -it / 4 else it / 4 } +
+        fadeOut(tween(300))
+}
+
+/**
+ * 底部导航四个 tab 的 composable 注册：挂方向感知横滑。
+ * 转场 lambda 返回 null 表示回落到 NavHost 默认（淡入淡出），故会话页等
+ * 非 tab 路由参与导航时两侧都走默认转场，不受横滑影响。
+ */
+private fun NavGraphBuilder.tabDestination(
+    route: String,
+    content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) = composable(
+    route,
+    enterTransition = { tabSlideEnter() },
+    exitTransition = { tabSlideExit() },
+    popEnterTransition = { tabSlideEnter() },
+    popExitTransition = { tabSlideExit() },
+    content = content,
+)
 
 /**
  * 单 Scaffold + 底部导航 + NavHost 的应用外壳。
@@ -90,7 +140,7 @@ fun ZhilianApp(
             startDestination = TopLevelDestination.PRACTICE.route,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(TopLevelDestination.PRACTICE.route) {
+            tabDestination(TopLevelDestination.PRACTICE.route) {
                 PracticeHomeScreen(
                     container = container,
                     onStartPractice = { questionIds ->
@@ -99,13 +149,13 @@ fun ZhilianApp(
                     },
                 )
             }
-            composable(TopLevelDestination.BANK.route) {
+            tabDestination(TopLevelDestination.BANK.route) {
                 BankScreen(container = container)
             }
-            composable(TopLevelDestination.STATS.route) {
+            tabDestination(TopLevelDestination.STATS.route) {
                 StatsScreen(container = container)
             }
-            composable(TopLevelDestination.SETTINGS.route) {
+            tabDestination(TopLevelDestination.SETTINGS.route) {
                 SettingsScreen(
                     container = container,
                     onOpenBatches = { navController.navigate(ROUTE_BATCHES) },
