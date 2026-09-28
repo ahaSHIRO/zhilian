@@ -153,9 +153,9 @@ def load_existing_batches(batches_dir, exclude_path):
 def validate_against_existing(batch, existing):
     """跨批次核对（spec 清单 6：batchOrder 不重复；8：疑似重复提示）。
 
-    另覆盖清单 3 后半段的缺口：App 对与已导入题库重复的 questionId 是
-    静默跳过而非报错（README 导入韧性），整批同步过去却少几道题很难察觉，
-    故在电脑端提前拦下。
+    另覆盖清单 3 后半段的缺口：App 导入时虽会把"题目 ID 已存在，跳过"计入
+    结果报告（BatchImportService），但那要到同步并导入后才看得到——整批同步
+    过去却少几道题很难察觉，故在电脑端预校验阶段提前拦下。
     """
     my_order = batch.get("batchOrder")
     questions = batch.get("questions") or []

@@ -159,7 +159,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 1. **来源必须引官方文档 URL**（不只引 Obsidian 笔记）——便于复审核实原文
 2. **复审独立复述原理**：复审代理不看答案，独立判断陈述真假，再与出题答案比对
-3. **术语核查**：若选项或解析使用了技术术语，复审须核实该术语在官方源码/文档中真实存在（见 §四「复审必查的三类硬伤」第 2 条的方法）
+3. **术语核查**：若选项或解析使用了技术术语，复审须核实该术语在官方源码/文档中真实存在（见 §二.4「复审必查的三类硬伤」第 2 条的方法）
 
 ### 逐题自查
 
@@ -204,7 +204,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 通道 | Channel 容量与会合、发送接收、关闭语义 |
 | 数据流 | Flow 冷热流、操作符、异常处理 |
 | 共享状态 | Mutex、原子类、线程封闭 |
-| 测试与调试 | runTest 虚拟时间、debug 模式与探针 |
+| 测试&调试 | runTest 虚拟时间、debug 模式与探针 |
 
 ### Java
 
@@ -231,7 +231,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 **必须自跑**（产出随批次一并交付）：
 1. §二.3 `batch-check.py` 预校验，附**通过输出**（0 错误）
-2. 代码题的 §二.5 运行验证，附实际运行结果（含 §四.4 的 stdout/stderr 分流与稳定性实测）
+2. 代码题的 §二.5 运行验证，附实际运行结果（含 §二.4「复审必查的三类硬伤」第 1 条的 stdout/stderr 分流与稳定性实测）
 3. 冷复审（执行方式见下方「子代理协议」）
 
 **冷复审的执行（子代理协议）**：出题代理**必须在交付前完成冷复审**，方式按环境二选一：
@@ -276,7 +276,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 通道 | channel、capacity、collect、exception |
 | 数据流 | flow、state-flow、flowon、collect、exception、capacity |
 | 共享状态 | mutex、synchronized |
-| 测试与调试 | runtest、virtual-time、debug-agent、coroutine-name |
+| 测试&调试 | runtest、virtual-time、debug-agent、coroutine-name |
 
 \* `basics` 为弱标签（语义过泛），**冻结**——存量题保留，新题不得再使用。
 

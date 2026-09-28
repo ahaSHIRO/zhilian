@@ -5,7 +5,7 @@
 ## 全局规则
 
 1. **入口一次性开启**：`MainActivity.onCreate` 中、`setContent` 之前调用 `androidx.activity.enableEdgeToEdge()`。全 App 仅此一处，禁止在其他地方重复设置系统栏样式。
-   - 使用默认 `SystemBarStyle.auto(...)`：状态栏透明，图标深浅色随系统深色模式自动翻转，不手动干预。
+   - MainActivity 的这次调用只负责开启沉浸窗口；**图标深浅色不依赖它的默认行为**，由 `ZhilianTheme` 统一接管（见下文「深浅色与对比度」）。
 2. **禁止硬编码避让**：不允许写死状态栏高度（24dp）或导航条高度（48dp/16dp），一切通过 `WindowInsets` 读取。
 3. **禁止双重避让**：避让只发生一次——要么容器（Scaffold/顶栏/底栏）消费，要么内容手动 `windowInsetsPadding`，不允许叠加导致大面积空白。
 
