@@ -60,20 +60,20 @@ def validate_schema(batch, schema):
 
 
 def validate_app_level(batch):
-    """应用级校验（batch-spec-v1.md 的清单 1/2/3/4/5）"""
+    """应用级校验（对应 batch-spec-v1.md 清单 7/3/4/2/1/5；清单 6/8 见 validate_against_existing）"""
     questions = batch.get("questions") or []
 
-    # 1. formatVersion 必须为 1（Schema 已用 const 卡，这里再明确提示）
+    # 清单 7：formatVersion 必须为 1（Schema 已用 const 卡，这里再明确提示）
     if batch.get("formatVersion") != 1:
         err(f"[应用级] formatVersion 必须为 1，实际 {batch.get('formatVersion')!r}")
 
-    # 2. 批次内 questionId 互不重复
+    # 清单 3 前半：批次内 questionId 互不重复（后半段跨批次比对在 validate_against_existing）
     ids = [q.get("questionId") for q in questions]
     dup_ids = {i for i in ids if ids.count(i) > 1}
     if dup_ids:
         err(f"[应用级] 批次内 questionId 重复：{sorted(dup_ids)}")
 
-    # 3. retiredQuestionIds 不得包含本批次新题
+    # 清单 4：retiredQuestionIds 不得包含本批次新题
     retired = batch.get("retiredQuestionIds") or []
     overlap = set(retired) & set(ids)
     if overlap:
@@ -86,12 +86,12 @@ def validate_app_level(batch):
         options = q.get("options") or []
         option_ids = [o.get("optionId") for o in options]
 
-        # 4. options 内 optionId 互不重复
+        # 清单 2：options 内 optionId 互不重复
         dup_opts = {o for o in option_ids if option_ids.count(o) > 1}
         if dup_opts:
             err(f"[应用级] 题 {qid} 选项标识重复：{sorted(dup_opts)}")
 
-        # 5. answer 引用的 optionId 必须存在于 options
+        # 清单 1：answer 引用的 optionId 必须存在于 options
         if qtype in ("single_choice", "multiple_choice"):
             if not options:
                 err(f"[应用级] 题 {qid} 是选择题但缺少 options")
@@ -129,7 +129,7 @@ def validate_app_level(batch):
         if qtype == "fill_in_blank" and q.get("options"):
             warn(f"[应用级] 题 {qid} 是填空却带了 options")
 
-        # 6. 分类名 NFC+trim 后非空
+        # 清单 5：分类名 NFC+trim 后非空
         cat = q.get("category")
         if not normalize_identity(cat or ""):
             err(f"[应用级] 题 {qid} 的分类名为空")
