@@ -12,6 +12,8 @@ data class PendingDuplicateEntity(
     @ColumnInfo(name = "batch_id") val batchId: String,
     @ColumnInfo(name = "question_id") val questionId: String,
     @ColumnInfo(name = "question_json") val questionJson: String,
+    /** 科目：待决项需能脱离批次顶层字段独立恢复成题目，故随项保存 */
+    @ColumnInfo(name = "subject") val subject: String,
     @ColumnInfo(name = "order_in_batch") val orderInBatch: Int,
     @ColumnInfo(name = "existing_question_id") val existingQuestionId: String,
 )

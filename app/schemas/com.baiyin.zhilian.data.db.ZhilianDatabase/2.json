@@ -1,0 +1,347 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "9ef8cb002057bc8d304fc8c8ed034c61",
+    "entities": [
+      {
+        "tableName": "questions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`question_id` TEXT NOT NULL, `type` TEXT NOT NULL, `subject` TEXT NOT NULL, `category` TEXT NOT NULL, `tags_json` TEXT NOT NULL, `stem` TEXT NOT NULL, `options_json` TEXT, `answer_json` TEXT NOT NULL, `explanation` TEXT NOT NULL, `source_json` TEXT NOT NULL, `batch_order` INTEGER NOT NULL, `order_in_batch` INTEGER NOT NULL, `inactive` INTEGER NOT NULL, `consecutive_perfect` INTEGER NOT NULL, `has_ever_wrong` INTEGER NOT NULL, `favorite` INTEGER NOT NULL, `imported_at` INTEGER NOT NULL, PRIMARY KEY(`question_id`))",
+        "fields": [
+          {
+            "fieldPath": "questionId",
+            "columnName": "question_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subject",
+            "columnName": "subject",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tagsJson",
+            "columnName": "tags_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stem",
+            "columnName": "stem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "optionsJson",
+            "columnName": "options_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "answerJson",
+            "columnName": "answer_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "explanation",
+            "columnName": "explanation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceJson",
+            "columnName": "source_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchOrder",
+            "columnName": "batch_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderInBatch",
+            "columnName": "order_in_batch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inactive",
+            "columnName": "inactive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consecutivePerfect",
+            "columnName": "consecutive_perfect",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasEverWrong",
+            "columnName": "has_ever_wrong",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "favorite",
+            "columnName": "favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importedAt",
+            "columnName": "imported_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "question_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_questions_category",
+            "unique": false,
+            "columnNames": [
+              "category"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_questions_category` ON `${TABLE_NAME}` (`category`)"
+          },
+          {
+            "name": "index_questions_batch_order_order_in_batch",
+            "unique": false,
+            "columnNames": [
+              "batch_order",
+              "order_in_batch"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_questions_batch_order_order_in_batch` ON `${TABLE_NAME}` (`batch_order`, `order_in_batch`)"
+          }
+        ]
+      },
+      {
+        "tableName": "answer_records",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `question_id` TEXT NOT NULL, `type` TEXT NOT NULL, `user_answer_json` TEXT NOT NULL, `score_rate` REAL NOT NULL, `is_perfect` INTEGER NOT NULL, `is_first_attempt` INTEGER NOT NULL, `answered_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "questionId",
+            "columnName": "question_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userAnswerJson",
+            "columnName": "user_answer_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scoreRate",
+            "columnName": "score_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPerfect",
+            "columnName": "is_perfect",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFirstAttempt",
+            "columnName": "is_first_attempt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answeredAt",
+            "columnName": "answered_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_answer_records_question_id",
+            "unique": false,
+            "columnNames": [
+              "question_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_answer_records_question_id` ON `${TABLE_NAME}` (`question_id`)"
+          },
+          {
+            "name": "index_answer_records_answered_at",
+            "unique": false,
+            "columnNames": [
+              "answered_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_answer_records_answered_at` ON `${TABLE_NAME}` (`answered_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "processed_batches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`batch_id` TEXT NOT NULL, `batch_order` INTEGER NOT NULL, `status` TEXT NOT NULL, `imported_count` INTEGER NOT NULL, `skipped_count` INTEGER NOT NULL, `failed_count` INTEGER NOT NULL, `pending_duplicate_count` INTEGER NOT NULL, `issues_json` TEXT, `processed_at` INTEGER NOT NULL, `file_name` TEXT NOT NULL, PRIMARY KEY(`batch_id`))",
+        "fields": [
+          {
+            "fieldPath": "batchId",
+            "columnName": "batch_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchOrder",
+            "columnName": "batch_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importedCount",
+            "columnName": "imported_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "skippedCount",
+            "columnName": "skipped_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failedCount",
+            "columnName": "failed_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingDuplicateCount",
+            "columnName": "pending_duplicate_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "issuesJson",
+            "columnName": "issues_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "processedAt",
+            "columnName": "processed_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "file_name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "batch_id"
+          ]
+        }
+      },
+      {
+        "tableName": "pending_duplicates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`batch_id` TEXT NOT NULL, `question_id` TEXT NOT NULL, `question_json` TEXT NOT NULL, `subject` TEXT NOT NULL, `order_in_batch` INTEGER NOT NULL, `existing_question_id` TEXT NOT NULL, PRIMARY KEY(`batch_id`, `question_id`))",
+        "fields": [
+          {
+            "fieldPath": "batchId",
+            "columnName": "batch_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "questionId",
+            "columnName": "question_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "questionJson",
+            "columnName": "question_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subject",
+            "columnName": "subject",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderInBatch",
+            "columnName": "order_in_batch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "existingQuestionId",
+            "columnName": "existing_question_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "batch_id",
+            "question_id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9ef8cb002057bc8d304fc8c8ed034c61')"
+    ]
+  }
+}

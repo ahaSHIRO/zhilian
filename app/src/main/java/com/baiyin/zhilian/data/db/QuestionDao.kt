@@ -45,6 +45,13 @@ interface QuestionDao {
     @RawQuery
     suspend fun countRaw(query: SupportSQLiteQuery): Int
 
+    /**
+     * 单列字符串结果（DISTINCT subject / category / type 等）。
+     * 取单列用 rawForPractice 会浪费整行映射，故单列走这个。
+     */
+    @RawQuery
+    suspend fun rawForStrings(query: SupportSQLiteQuery): List<String>
+
     @Query("UPDATE questions SET favorite = :favorite WHERE question_id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)
 

@@ -132,7 +132,7 @@ class BatchImportService(
                             if (sameStem.isNotEmpty()) {
                                 duplicates += DuplicateCandidate(batch.batchId, q, index, sameStem.first().questionId)
                             } else {
-                                toInsert += toEntity(q, batch.batchOrder, index, now)
+                                toInsert += toEntity(q, batch.subject, batch.batchOrder, index, now)
                             }
                         }
                     }
@@ -154,6 +154,7 @@ class BatchImportService(
                         batchId = it.batchId,
                         questionId = it.question.questionId,
                         questionJson = BatchJson.json.encodeToString(it.question),
+                        subject = batch.subject,
                         orderInBatch = it.orderInBatch,
                         existingQuestionId = it.existingQuestionId,
                     )
@@ -204,7 +205,17 @@ class BatchImportService(
                 val q = BatchJson.json.decodeFromString<QuestionDto>(item.questionJson)
                 val stillExists = questionDao.existingIds(listOf(questionId)).isNotEmpty()
                 if (!stillExists) {
-                    questionDao.insertAll(listOf(toEntity(q, batchOrderOf(batchId), item.orderInBatch, System.currentTimeMillis())))
+                    questionDao.insertAll(
+                        listOf(
+                            toEntity(
+                                q = q,
+                                subject = item.subject, // 科目随待决项保存，可独立恢复
+                                batchOrder = batchOrderOf(batchId),
+                                orderInBatch = item.orderInBatch,
+                                importedAt = System.currentTimeMillis(),
+                            )
+                        )
+                    )
                 }
             }
             val remaining = duplicateDao.countByBatch(batchId)
@@ -248,11 +259,17 @@ class BatchImportService(
         return null
     }
 
-    private fun toEntity(q: QuestionDto, batchOrder: Int, orderInBatch: Int, importedAt: Long): QuestionEntity =
+    private fun toEntity(
+        q: QuestionDto,
+        subject: String,
+        batchOrder: Int,
+        orderInBatch: Int,
+        importedAt: Long,
+    ): QuestionEntity =
         QuestionEntity(
             questionId = q.questionId,
             type = q.type,
-            subject = "kotlin", // v1 Schema 枚举仅 kotlin；扩科目时从批次 subject 字段读取
+            subject = subject, // 取自批次 subject 字段（Schema 枚举 kotlin / java）
             category = normalizeIdentity(q.category),
             tagsJson = BatchJson.json.encodeToString(q.tags.map { normalizeIdentity(it) }),
             stem = q.stem,

@@ -26,12 +26,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,10 +67,11 @@ private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
 /**
  * 练习会话：一题一卡的卡片流（ADR-0003）。
  * - HorizontalPager 左右滑动切题，peek 露边暗示；滑动纯导航，未提交可滑回修改
- * - 提交后就地高亮 + 卡片内联展开解析（弹层废弃）
+ * - 提交后就地高亮 + 反馈横幅留在卡内；解析走半模态面板升起（ADR-0007）
  * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 完成）
  * - 首版退出不恢复会话（README），已提交作答保留在库中
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeSessionScreen(
     container: AppContainer,
@@ -84,6 +88,8 @@ fun PracticeSessionScreen(
     val skipped = remember { mutableStateMapOf<Int, Boolean>() }
     /** 提交进行中（按题索引）；防双击重复落库（ADR-0004） */
     val submitting = remember { mutableStateMapOf<Int, Boolean>() }
+    /** 当前升起半模态解析面板的题索引；null = 面板关闭（ADR-0007） */
+    var explanationFor by remember { mutableStateOf<Int?>(null) }
     var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
@@ -97,7 +103,18 @@ fun PracticeSessionScreen(
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { questions.size + 1 })
 
-    BackHandler { confirmExit = true }
+    // 滑到别的题就收起面板：面板属于当前卡片，不跨题保留（ADR-0007）
+    LaunchedEffect(pagerState.currentPage) {
+        explanationFor = null
+    }
+
+    // 面板打开时先返回键关面板，而不是直接退出会话
+    BackHandler(enabled = explanationFor != null) {
+        explanationFor = null
+    }
+    BackHandler(enabled = explanationFor == null) {
+        confirmExit = true
+    }
 
     if (questions.isEmpty()) {
         Column(
@@ -189,13 +206,75 @@ fun PracticeSessionScreen(
                         }
                     },
                     onSkip = { skipped[page] = true },
+                    onShowExplanation = { explanationFor = page },
                 )
             }
         }
     }
+
+    // 半模态解析面板（ADR-0007）：约六成屏高，可滚动；下拉或点遮罩关闭
+    val sheetPage = explanationFor
+    if (sheetPage != null && sheetPage in questions.indices) {
+        val question = questions[sheetPage]
+        val result = submitted[sheetPage]
+        ModalBottomSheet(
+            onDismissRequest = { explanationFor = null },
+            sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = false, // 初始停在半展开（约六成屏）
+            ),
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            ExplanationSheet(
+                question = question,
+                result = result,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }
 
-/** 单张题卡：题干 + 作答区 + 操作行（跳过/提交）+ 提交后内联解析 */
+/**
+ * 半模态解析面板内容：反馈结论 + 教材式解析 + 来源（ADR-0007）。
+ * 解析在此可垂直滚动，卡片本身不再被解析撑长。
+ */
+@Composable
+private fun ExplanationSheet(
+    question: QuestionEntity,
+    result: SubmitResult?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (result != null) {
+            Text(
+                when {
+                    result.perfect -> stringResource(R.string.session_perfect)
+                    result.scoreRate > 0 -> stringResource(
+                        R.string.session_partial,
+                        (result.scoreRate * 100).toInt(),
+                    )
+                    else -> stringResource(R.string.session_wrong)
+                },
+                style = MaterialTheme.typography.titleLarge,
+                color = if (result.perfect) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+            )
+        }
+        QuestionMarkdown(content = question.explanation)
+        SourceLine(question)
+    }
+}
+
+/** 单张题卡：题干 + 作答区 + 操作行（跳过/提交）+ 提交后反馈横幅（解析走半模态面板，ADR-0007） */
 @Composable
 private fun QuestionCard(
     question: QuestionEntity,
@@ -207,6 +286,7 @@ private fun QuestionCard(
     onAnswerChange: (UserAnswer) -> Unit,
     onSubmit: () -> Unit,
     onSkip: () -> Unit,
+    onShowExplanation: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val options: List<OptionRow> = remember(question) {
@@ -376,7 +456,8 @@ private fun QuestionCard(
                 }
             }
 
-            // 提交后：反馈横幅 + 内联解析（ADR-0003：弹层废弃）
+            // 提交后：反馈横幅留在卡内（ADR-0007），解析与来源移到半模态面板，
+            // 避免教材式解析把卡片撑到整页
             AnimatedVisibility(visible = revealed) {
                 val r = result
                 if (r != null) {
@@ -390,8 +471,12 @@ private fun QuestionCard(
                             style = MaterialTheme.typography.titleLarge,
                             color = if (r.perfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         )
-                        QuestionMarkdown(content = question.explanation)
-                        SourceLine(question)
+                        OutlinedButton(
+                            onClick = { onShowExplanation() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.session_view_explanation))
+                        }
                     }
                 }
             }

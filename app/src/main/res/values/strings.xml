@@ -25,7 +25,13 @@
     <string name="clear_history_done">练习记录已清除。</string>
 
     <!-- 练习配置 -->
+    <string name="practice_filter_subject">科目</string>
     <string name="practice_filter_category">分类</string>
+    <string name="practice_filter_type">题型</string>
+    <string name="type_single_choice">单选</string>
+    <string name="type_multiple_choice">多选</string>
+    <string name="type_true_false">判断</string>
+    <string name="type_fill_in_blank">填空</string>
     <string name="practice_empty_bank">题库为空：先在「设置 → 批次导入」导入题目批次。</string>
     <string name="practice_filter_scope">范围</string>
     <string name="practice_scope_wrong">错题</string>
@@ -44,6 +50,7 @@
     <string name="session_next">下一题</string>
     <string name="session_perfect">回答正确</string>
     <string name="session_wrong">回答错误</string>
+    <string name="session_view_explanation">查看解析</string>
     <string name="session_partial">部分正确（得分率 %1$d%%）</string>
     <string name="session_close_sheet">继续</string>
     <string name="session_exit_title">退出练习？</string>
