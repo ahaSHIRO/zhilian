@@ -14,12 +14,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.ui.screens.bank.BankScreen
 import com.baiyin.zhilian.ui.screens.practice.PracticeHomeScreen

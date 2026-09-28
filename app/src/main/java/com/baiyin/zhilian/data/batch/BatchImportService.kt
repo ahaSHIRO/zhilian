@@ -63,7 +63,6 @@ class BatchImportService(
 ) {
     private val schemaValidator = BatchSchemaValidator(context)
     private val questionDao: QuestionDao = db.questionDao()
-    private val recordDao: AnswerRecordDao = db.answerRecordDao()
     private val batchDao: ProcessedBatchDao = db.processedBatchDao()
     private val duplicateDao: PendingDuplicateDao = db.pendingDuplicateDao()
 
@@ -272,7 +271,9 @@ class BatchImportService(
             subject = subject, // 取自批次 subject 字段（Schema 枚举 kotlin / java）
             category = normalizeIdentity(q.category),
             tagsJson = BatchJson.json.encodeToString(q.tags.map { normalizeIdentity(it) }),
-            stem = q.stem,
+            // stem 也归一化落库：findByStem 用归一化值查询，若原样存则含首尾空白
+            // 或 NFD 形式的题干会漏判疑似重复（spec §应用级校验 8）
+            stem = normalizeIdentity(q.stem),
             optionsJson = q.options?.let { BatchJson.json.encodeToString(it) },
             answerJson = if (q.type == "fill_in_blank") {
                 BatchJson.json.encodeToString(q.acceptableAnswers ?: emptyList())

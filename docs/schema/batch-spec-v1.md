@@ -5,8 +5,8 @@
 ## 文件形态与命名
 
 - 一个批次 = 一个 JSON 文件，UTF-8（无 BOM）编码，单行或多行均可。
-- 文件命名约定：`batch-{batchOrder 四位}.json`，如 `batch-0001.json`。仅为人工审核便利；**App 以文件内容中的 `batchId` 为准，不依赖文件名**。
-- 审核通过后原样放入 Syncthing 批次目录，不再修改；需要修正时生成新批次（新 batchId），不覆盖已同步文件。
+- 文件命名约定：`batch-{batchOrder 四位}.json`，如 `batch-0001.json`。仅为人工验收便利；**App 以文件内容中的 `batchId` 为准，不依赖文件名**。
+- **定稿后**（复审通过 + 维护者验收，见 ADR-0006）原样放入 Syncthing 批次目录，不再修改；需要修正时生成新批次（新 batchId），不覆盖已同步文件。
 
 ## 顶层字段
 
@@ -27,7 +27,7 @@
 | single_choice | options, answer | answer 为单个选项 ID（如 `"A"`） |
 | multiple_choice | options, answer | answer 为选项 ID 数组，≥2 且互异；评分按集合比对 |
 | true_false | answer | answer 为布尔；App 固定渲染「正确/错误」两选项，批次不含 options |
-| fill_in_blank | acceptableAnswers | 可接受答案数组；用户答案**去除首尾空白后区分大小写精确比对** |
+| fill_in_blank | acceptableAnswers | 可接受答案数组；用户答案经 **Unicode NFC 归一化 + 去首尾空白**后区分大小写精确比对（见 §Unicode 与大小写） |
 
 选项 `optionId` 为 A–F 单字母，`options` 数组顺序即展示顺序。多选评分沿用 README 公式 `max(0, 正确选中数 − 错误选中数) / 正确选项总数`。
 

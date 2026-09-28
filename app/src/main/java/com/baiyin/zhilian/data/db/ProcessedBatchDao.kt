@@ -14,9 +14,6 @@ interface ProcessedBatchDao {
     @Query("SELECT * FROM processed_batches ORDER BY batch_order")
     fun observeAll(): Flow<List<ProcessedBatchEntity>>
 
-    @Query("SELECT batch_id FROM processed_batches WHERE status = 'IMPORTED'")
-    suspend fun importedBatchIds(): List<String>
-
     @Query("SELECT * FROM processed_batches WHERE batch_id = :batchId")
     suspend fun getById(batchId: String): ProcessedBatchEntity?
 

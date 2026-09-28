@@ -38,7 +38,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +53,6 @@ import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.OptionDto
 import com.baiyin.zhilian.data.batch.SourceDto
 import com.baiyin.zhilian.data.db.QuestionEntity
-import com.baiyin.zhilian.data.practice.SubmitSummary
 import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard

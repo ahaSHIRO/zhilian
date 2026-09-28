@@ -4,8 +4,6 @@ import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.db.AnswerRecordEntity
 import com.baiyin.zhilian.data.db.QuestionEntity
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
 import java.text.Normalizer
 
 /** 用户作答（会话内存态） */

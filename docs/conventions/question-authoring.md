@@ -39,7 +39,8 @@
 ### 3. JSON 预校验（PC 端，必须做）
 
 ```powershell
-python C:\Users\29335\.local\bin\zl-batch-check.py <批次文件路径>
+cd C:\Code\Android\知练
+python tools\batch-check.py <批次文件路径>
 ```
 
 App 对 Schema 不合格的批次是**整批拒绝**且只回报前 5 条错误——同步到手机才发现，就要走"回炉 → 重传 → 重导"一整圈。预校验脚本复用同一份 Schema，并额外检查 Schema 表达不了的应用级规则（见 §四）。
@@ -165,7 +166,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 ## 四、JSON 预校验清单
 
-脚本 `zl-batch-check.py` 检查（前者由 `jsonschema` 按权威 Schema 校验，后者为 Schema 表达不了的）：
+脚本 `tools/batch-check.py` 检查（前者由 `jsonschema` 按权威 Schema 校验，后者为 Schema 表达不了的）：
 
 1. `answer` 引用的每个 `optionId` 必须存在于该题 `options`
 2. `options` 内 `optionId` 互不重复

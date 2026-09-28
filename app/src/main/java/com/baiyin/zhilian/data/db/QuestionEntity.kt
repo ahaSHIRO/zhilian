@@ -20,7 +20,7 @@ data class QuestionEntity(
     @PrimaryKey @ColumnInfo(name = "question_id") val questionId: String,
     /** 题型：single_choice / multiple_choice / true_false / fill_in_blank */
     @ColumnInfo(name = "type") val type: String,
-    /** 所属科目代码（当前仅 kotlin） */
+    /** 所属科目代码（kotlin / java，取自批次顶层 subject 字段） */
     @ColumnInfo(name = "subject") val subject: String,
     /** 单层分类名，科目内 NFC+trim 精确匹配 */
     @ColumnInfo(name = "category") val category: String,

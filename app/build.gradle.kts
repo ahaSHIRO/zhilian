@@ -50,9 +50,9 @@ android {
     }
 }
 
-// 把权威 Schema（docs/schema/）复制进构建目录供 assets 打包
+// 把权威 Schema 复制进构建目录供 assets 打包（仅 schema 本体，BatchSchemaValidator 只读该文件）
 val copyBatchSchema = tasks.register<Copy>("copyBatchSchema") {
-    from(rootProject.file("docs/schema"))
+    from(rootProject.file("docs/schema/batch-v1.schema.json"))
     into(layout.buildDirectory.dir("generated/batchSchema"))
 }
 
@@ -61,7 +61,8 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
     .configureEach { dependsOn(copyBatchSchema) }
 
 ksp {
-    // Room 导出 Schema 便于迁移审查与测试（首版仅一张表版本 1）
+    // Room 导出 Schema 便于迁移审查与测试（当前 v2，4 张表：questions /
+    // answer_records / processed_batches / pending_duplicates）
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
