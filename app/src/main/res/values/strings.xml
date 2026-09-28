@@ -47,12 +47,10 @@
     <string name="session_progress">第 %1$d / %2$d 题</string>
     <string name="session_skip">跳过</string>
     <string name="session_submit">提交</string>
-    <string name="session_next">下一题</string>
     <string name="session_perfect">回答正确</string>
     <string name="session_wrong">回答错误</string>
     <string name="session_view_explanation">查看解析</string>
     <string name="session_partial">部分正确（得分率 %1$d%%）</string>
-    <string name="session_close_sheet">继续</string>
     <string name="session_exit_title">退出练习？</string>
     <string name="session_exit_body">当前练习进度不会恢复，已提交的作答会保留。</string>
     <string name="session_exit_confirm">退出</string>
