@@ -16,7 +16,7 @@
 | batchId | UUID | ✓ | 批次唯一 ID，永不复用 |
 | batchOrder | 整数 1–9999 | ✓ | 批次顺序号，决定顺序练习追加次序 |
 | createdAt | date | ✓ | 创建日期 YYYY-MM-DD |
-| subject | 枚举 | ✓ | 科目代码，当前仅 `kotlin` |
+| subject | 枚举 | ✓ | 科目代码，小写；当前为 `kotlin`、`java`。扩科目须改 Schema |
 | questions | 数组 1–200 | ✓ | 新增题目，数组顺序即批次文件内顺序 |
 | retiredQuestionIds | UUID 数组 | ✗ | 本批次停用的既有题目 ID，默认空 |
 
