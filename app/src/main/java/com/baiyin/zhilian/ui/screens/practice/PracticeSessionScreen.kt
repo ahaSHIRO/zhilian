@@ -2,6 +2,7 @@ package com.baiyin.zhilian.ui.screens.practice
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -45,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.AppContainer
@@ -89,6 +92,8 @@ fun PracticeSessionScreen(
     val submitting = remember { mutableStateMapOf<Int, Boolean>() }
     /** 当前升起半模态解析面板的题索引；null = 面板关闭（ADR-0007） */
     var explanationFor by remember { mutableStateOf<Int?>(null) }
+    /** 解析面板档位（会话内记忆）：双击打开按上次的档位，默认半屏；用户拖到全屏后记住 */
+    var explanationExpanded by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
@@ -207,7 +212,11 @@ fun PracticeSessionScreen(
                         }
                     },
                     onSkip = { skipped[page] = true },
-                    onShowExplanation = { explanationFor = page },
+                    onDoubleTap = if (submitted.containsKey(page)) {
+                        { explanationFor = page }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -218,11 +227,20 @@ fun PracticeSessionScreen(
     if (sheetPage != null && sheetPage in questions.indices) {
         val question = questions[sheetPage]
         val result = submitted[sheetPage]
+        // 双击打开默认半屏；会话内记住用户拖到的档位，下次打开按上次的来（3b 决策）。
+        // 这版 M3 的 rememberModalBottomSheetState 无 initialValue 参数且 animateTo 已 internal，
+        // 故面板以半屏起步，打开后按记忆档位 expand()/partialExpand() 归位。
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        LaunchedEffect(sheetState.currentValue) {
+            explanationExpanded = sheetState.currentValue == SheetValue.Expanded
+        }
+        LaunchedEffect(sheetPage) {
+            if (explanationExpanded) sheetState.expand() else sheetState.partialExpand()
+        }
+
         ModalBottomSheet(
             onDismissRequest = { explanationFor = null },
-            sheetState = rememberModalBottomSheetState(
-                skipPartiallyExpanded = false, // 初始停在半展开（约六成屏）
-            ),
+            sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
         ) {
             ExplanationSheet(
@@ -287,7 +305,7 @@ private fun QuestionCard(
     onAnswerChange: (UserAnswer) -> Unit,
     onSubmit: () -> Unit,
     onSkip: () -> Unit,
-    onShowExplanation: () -> Unit,
+    onDoubleTap: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val options: List<OptionRow> = remember(question) {
@@ -320,7 +338,19 @@ private fun QuestionCard(
     val revealed = result != null
 
     ZhilianCard(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                // 已提交后选项为只读，双击空白区（题干/选项间）弹出解析；
+                // 点在按钮或选项上被子级消费，双击天然不触发
+                if (onDoubleTap != null) {
+                    Modifier.pointerInput(onDoubleTap) {
+                        detectTapGestures(onDoubleTap = { onDoubleTap() })
+                    }
+                } else {
+                    Modifier
+                }
+            ),
     ) {
         Column(
             modifier = Modifier
@@ -458,27 +488,19 @@ private fun QuestionCard(
             }
 
             // 提交后：反馈横幅留在卡内（ADR-0007），解析与来源移到半模态面板，
-            // 避免教材式解析把卡片撑到整页
+            // 避免教材式解析把卡片撑到整页；面板入口为双击卡片（无按钮）
             AnimatedVisibility(visible = revealed) {
                 val r = result
                 if (r != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            when {
-                                r.perfect -> stringResource(R.string.session_perfect)
-                                r.scoreRate > 0 -> stringResource(R.string.session_partial, (r.scoreRate * 100).toInt())
-                                else -> stringResource(R.string.session_wrong)
-                            },
-                            style = MaterialTheme.typography.titleLarge,
-                            color = if (r.perfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        )
-                        OutlinedButton(
-                            onClick = { onShowExplanation() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.session_view_explanation))
-                        }
-                    }
+                    Text(
+                        when {
+                            r.perfect -> stringResource(R.string.session_perfect)
+                            r.scoreRate > 0 -> stringResource(R.string.session_partial, (r.scoreRate * 100).toInt())
+                            else -> stringResource(R.string.session_wrong)
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (r.perfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
