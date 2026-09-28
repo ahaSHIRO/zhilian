@@ -10,12 +10,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,13 +30,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeFilter
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+
+/** 题量滑块参数（定案：10–100、步长 5、默认 20；调整只改这里） */
+private const val LIMIT_MIN = 10
+private const val LIMIT_MAX = 100
+private const val LIMIT_STEP = 5
+private const val LIMIT_DEFAULT = 20
 
 /**
  * 筛选选择的"应用内保留"：切 tab、进会话返回都不丢，跨进程（杀 App 重开）仍重置。
@@ -54,6 +67,7 @@ private val StringSetSaver = Saver<Set<String>, List<String>>(
  * 标签再跟随已选分类收窄：标签基数远高于分类（18 道题已有 20+ 个），
  * 全量平铺会把配置页撑成两屏，故先选分类再按标签细筛。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeHomeScreen(
     container: AppContainer,
@@ -73,7 +87,11 @@ fun PracticeHomeScreen(
     var onlyWrong by rememberSaveable { mutableStateOf(false) }
     var onlyFavorite by rememberSaveable { mutableStateOf(false) }
     var sequential by rememberSaveable { mutableStateOf(true) }
-    var limit by rememberSaveable { mutableStateOf(20) }
+    var limit by rememberSaveable { mutableStateOf(LIMIT_DEFAULT) }
+    // 题量面板：草稿值在滑块里调，确定才写回 limit；面板开着时实时预览草稿值的匹配数
+    var showLimitSheet by rememberSaveable { mutableStateOf(false) }
+    var limitDraft by rememberSaveable { mutableStateOf(LIMIT_DEFAULT) }
+    var draftMatchedCount by remember { mutableStateOf(0) }
     var matchedCount by remember { mutableStateOf(0) }
     var wrongCount by remember { mutableStateOf(0) }
     var favoriteCount by remember { mutableStateOf(0) }
@@ -259,16 +277,16 @@ fun PracticeHomeScreen(
             ) { Text(stringResource(R.string.practice_order_random)) }
         }
 
-        // ---- 题量 ----
+        // ---- 题量（入口行；滑块在半模态面板里，固定 10/20/50 档位数不够用）----
         Text(stringResource(R.string.practice_filter_limit), style = MaterialTheme.typography.titleMedium)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            listOf(10, 20, 50).forEachIndexed { index, n ->
-                SegmentedButton(
-                    selected = limit == n,
-                    onClick = { limit = n },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
-                ) { Text("$n") }
-            }
+        OutlinedButton(
+            onClick = {
+                limitDraft = limit
+                showLimitSheet = true
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.practice_limit_value, limit))
         }
 
         Text(
@@ -292,12 +310,60 @@ fun PracticeHomeScreen(
             Text(stringResource(R.string.practice_start))
         }
     }
+
+    // 题量半模态面板：草稿值随滑块走，确定才写回；与解析面板同一交互语言（ADR-0007）
+    if (showLimitSheet) {
+        LaunchedEffect(limitDraft) {
+            draftMatchedCount = container.practiceRepository.countMatching(currentFilter())
+        }
+        ModalBottomSheet(onDismissRequest = { showLimitSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    stringResource(R.string.practice_limit_value, limitDraft),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Slider(
+                    value = limitDraft.toFloat(),
+                    onValueChange = { limitDraft = it.roundToInt() },
+                    valueRange = LIMIT_MIN.toFloat()..LIMIT_MAX.toFloat(),
+                    steps = (LIMIT_MAX - LIMIT_MIN) / LIMIT_STEP - 1,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Text(
+                    stringResource(R.string.practice_matched_count, draftMatchedCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    TextButton(onClick = { limitDraft = LIMIT_DEFAULT }) {
+                        Text(stringResource(R.string.practice_limit_reset))
+                    }
+                    Button(onClick = {
+                        limit = limitDraft
+                        showLimitSheet = false
+                    }) {
+                        Text(stringResource(R.string.practice_limit_apply))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** 科目代码 → 展示名（Schema 里是小写代码） */
 private fun subjectLabel(code: String): String = when (code) {
     "kotlin" -> "Kotlin"
     "java" -> "Java"
+    "arkts" -> "ArkTS"
     else -> code
 }
 

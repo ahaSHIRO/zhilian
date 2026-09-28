@@ -45,6 +45,9 @@
     <string name="practice_order_sequential">顺序</string>
     <string name="practice_order_random">随机</string>
     <string name="practice_filter_limit">题量</string>
+    <string name="practice_limit_value">%1$d 题</string>
+    <string name="practice_limit_apply">确定</string>
+    <string name="practice_limit_reset">回到默认</string>
     <string name="practice_matched_count">符合条件的题目：%1$d 道</string>
     <string name="practice_start">开始练习</string>
 
@@ -61,6 +64,8 @@
     <string name="session_exit_confirm">退出</string>
     <string name="session_summary_title">练习完成</string>
     <string name="session_summary_body">作答 %1$d 题，答对 %2$d 题，跳过 %3$d 题。</string>
+    <!-- 会话得分：满分 100 按题数均分，跳过计 0 分（CONTEXT.md「会话得分」） -->
+    <string name="session_summary_score">本次得分 %1$d / 100</string>
     <string name="session_done">完成</string>
     <string name="session_skipped_note">已标记跳过，可继续作答；滑走不保存作答。</string>
     <string name="session_unfinished_hint">还有 %1$d 题未作答</string>

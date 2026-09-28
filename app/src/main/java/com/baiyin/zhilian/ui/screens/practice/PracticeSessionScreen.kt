@@ -57,6 +57,7 @@ import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.ZhilianOptionRow
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** 单题提交结果（就地反馈与内联解析依据） */
@@ -172,6 +173,8 @@ fun PracticeSessionScreen(
                     answered = submitted.size,
                     perfect = submitted.values.count { it.perfect },
                     skippedCount = skipped.size,
+                    // 会话得分 = Σ(每题得分率) / 题数 × 100，跳过计 0 分；语义见 CONTEXT.md「会话得分」
+                    score = (submitted.values.sumOf { it.scoreRate } / questions.size * 100).roundToInt(),
                     questionCount = questions.size,
                     firstUnansweredIndex = questions.indices.firstOrNull { it !in submitted },
                     onJumpToUnanswered = { index ->
@@ -482,12 +485,13 @@ private fun QuestionCard(
     }
 }
 
-/** 结尾卡：会话小结 + 未答完提醒 + 完成退出（ADR-0003） */
+/** 结尾卡：会话小结 + 得分 + 未答完提醒 + 完成退出（ADR-0003） */
 @Composable
 private fun SummaryCard(
     answered: Int,
     perfect: Int,
     skippedCount: Int,
+    score: Int,
     questionCount: Int,
     firstUnansweredIndex: Int?,
     onJumpToUnanswered: (Int) -> Unit,
@@ -510,6 +514,11 @@ private fun SummaryCard(
                 stringResource(R.string.session_summary_body, answered, perfect, skippedCount),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(vertical = 16.dp),
+            )
+            Text(
+                stringResource(R.string.session_summary_score, score),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
             if (firstUnansweredIndex != null) {
                 Text(
