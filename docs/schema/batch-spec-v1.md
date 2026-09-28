@@ -5,7 +5,7 @@
 ## 文件形态与命名
 
 - 一个批次 = 一个 JSON 文件，UTF-8（无 BOM）编码，单行或多行均可。
-- 文件命名约定：`batch-{batchOrder 四位}.json`，如 `batch-0001.json`。仅为人工验收便利；**App 以文件内容中的 `batchId` 为准，不依赖文件名**。
+- 文件命名约定：`batch-{batchOrder 四位}[-{主题}].json`，如 `batch-0001.json` 或 `batch-0005-Flow冷热流.json`。仅为人工验收便利；**App 以文件内容中的 `batchId` 为准，不依赖文件名**。
 - **定稿后**（复审通过 + 维护者验收，见 ADR-0006）原样放入 Syncthing 批次目录，不再修改；需要修正时生成新批次（新 batchId），不覆盖已同步文件。
 
 ## 顶层字段
