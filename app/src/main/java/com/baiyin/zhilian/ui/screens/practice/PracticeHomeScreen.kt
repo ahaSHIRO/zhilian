@@ -22,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -30,6 +32,16 @@ import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeFilter
 import kotlinx.coroutines.launch
+
+/**
+ * 筛选选择的"应用内保留"：切 tab、进会话返回都不丢，跨进程（杀 App 重开）仍重置。
+ * 后者是用户明确要的行为（随手刷/专攻错题/挑专题/顺序推四场景都存在，
+ * 跨进程记住选择会"帮你回忆现在不想要的东西"），故只到 Saveable 这一层为止。
+ */
+private val StringSetSaver = Saver<Set<String>, List<String>>(
+    save = { it.toList() },
+    restore = { it.toSet() },
+)
 
 /**
  * 练习配置页：科目 + 分类 + 标签 + 题型 + 范围（全部/错题/收藏）+ 顺序/随机 + 数量。
@@ -48,18 +60,20 @@ fun PracticeHomeScreen(
     onStartPractice: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 用户手选的筛选状态走 Saveable（应用内保留，见 StringSetSaver 注释）；
+    // 列表与计数是 DB 派生值，回来时 LaunchedEffect 会重算，不值得存
     var subjects by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedSubjects by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedSubjects by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
     var categories by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedCategories by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
     var tags by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedTags by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedTags by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
     var types by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedTypes by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var onlyWrong by remember { mutableStateOf(false) }
-    var onlyFavorite by remember { mutableStateOf(false) }
-    var sequential by remember { mutableStateOf(true) }
-    var limit by remember { mutableStateOf(20) }
+    var selectedTypes by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
+    var onlyWrong by rememberSaveable { mutableStateOf(false) }
+    var onlyFavorite by rememberSaveable { mutableStateOf(false) }
+    var sequential by rememberSaveable { mutableStateOf(true) }
+    var limit by rememberSaveable { mutableStateOf(20) }
     var matchedCount by remember { mutableStateOf(0) }
     var wrongCount by remember { mutableStateOf(0) }
     var favoriteCount by remember { mutableStateOf(0) }
