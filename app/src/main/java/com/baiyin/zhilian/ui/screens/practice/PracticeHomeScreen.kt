@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeFilter
+import com.baiyin.zhilian.ui.components.ZhilianCard
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -149,165 +150,186 @@ fun PracticeHomeScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // ---- 科目 ----
-        if (subjects.isNotEmpty()) {
-            Text(stringResource(R.string.practice_filter_subject), style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                subjects.forEach { subject ->
-                    FilterChip(
-                        selected = subject in selectedSubjects,
-                        onClick = {
-                            selectedSubjects = if (subject in selectedSubjects) {
-                                selectedSubjects - subject
-                            } else {
-                                selectedSubjects + subject
+        // ---- 筛选条件卡：决定这次练什么（科目/分类/标签/题型/范围）----
+        ZhilianCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(stringResource(R.string.practice_card_filters), style = MaterialTheme.typography.titleMedium)
+
+                // ---- 科目 ----
+                if (subjects.isNotEmpty()) {
+                    SectionLabel(stringResource(R.string.practice_filter_subject))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        subjects.forEach { subject ->
+                            FilterChip(
+                                selected = subject in selectedSubjects,
+                                onClick = {
+                                    selectedSubjects = if (subject in selectedSubjects) {
+                                        selectedSubjects - subject
+                                    } else {
+                                        selectedSubjects + subject
+                                    }
+                                },
+                                label = { Text(subjectLabel(subject)) },
+                            )
+                        }
+                    }
+                }
+
+                // ---- 分类（跟随科目）----
+                SectionLabel(stringResource(R.string.practice_filter_category))
+                if (categories.isEmpty()) {
+                    Text(
+                        stringResource(R.string.practice_empty_bank),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    // 单层分类 chips，多选
+                    categories.chunked(3).forEach { rowCategories ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowCategories.forEach { category ->
+                                FilterChip(
+                                    selected = category in selectedCategories,
+                                    onClick = {
+                                        selectedCategories = if (category in selectedCategories) {
+                                            selectedCategories - category
+                                        } else {
+                                            selectedCategories + category
+                                        }
+                                    },
+                                    label = { Text(category) },
+                                )
                             }
-                        },
-                        label = { Text(subjectLabel(subject)) },
+                        }
+                    }
+                }
+
+                // ---- 标签（跟随已选分类；比分类更细，承担挑专题刷的需求）----
+                if (selectedCategories.isEmpty()) {
+                    Text(
+                        stringResource(R.string.practice_tag_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (tags.isNotEmpty()) {
+                    SectionLabel(stringResource(R.string.practice_filter_tag))
+                    // 用 FlowRow 而非每行固定个数：标签是长短不一的英文词，固定分栏会把长词压成竖排
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        tags.forEach { tag ->
+                            FilterChip(
+                                selected = tag in selectedTags,
+                                onClick = {
+                                    selectedTags = if (tag in selectedTags) {
+                                        selectedTags - tag
+                                    } else {
+                                        selectedTags + tag
+                                    }
+                                },
+                                label = { Text(tag) },
+                            )
+                        }
+                    }
+                }
+
+                // ---- 题型 ----
+                if (types.isNotEmpty()) {
+                    SectionLabel(stringResource(R.string.practice_filter_type))
+                    types.chunked(4).forEach { rowTypes ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowTypes.forEach { type ->
+                                FilterChip(
+                                    selected = type in selectedTypes,
+                                    onClick = {
+                                        selectedTypes = if (type in selectedTypes) {
+                                            selectedTypes - type
+                                        } else {
+                                            selectedTypes + type
+                                        }
+                                    },
+                                    label = { Text(typeLabel(type)) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ---- 范围（两个开关取交集：同时打开 = 既答错过又被收藏）----
+                SectionLabel(stringResource(R.string.practice_filter_scope))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = onlyWrong,
+                        onClick = { onlyWrong = !onlyWrong },
+                        label = { Text(stringResource(R.string.practice_scope_wrong_count, wrongCount)) },
+                    )
+                    FilterChip(
+                        selected = onlyFavorite,
+                        onClick = { onlyFavorite = !onlyFavorite },
+                        label = { Text(stringResource(R.string.practice_scope_favorite_count, favoriteCount)) },
                     )
                 }
+
+                // 卡尾：筛选结果预览（计数接口不受题量上限截断）
+                Text(
+                    stringResource(R.string.practice_matched_count, matchedCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
-        // ---- 分类（跟随科目）----
-        Text(stringResource(R.string.practice_filter_category), style = MaterialTheme.typography.titleMedium)
-        if (categories.isEmpty()) {
-            Text(
-                stringResource(R.string.practice_empty_bank),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            // 单层分类 chips，多选
-            categories.chunked(3).forEach { rowCategories ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowCategories.forEach { category ->
-                        FilterChip(
-                            selected = category in selectedCategories,
-                            onClick = {
-                                selectedCategories = if (category in selectedCategories) {
-                                    selectedCategories - category
-                                } else {
-                                    selectedCategories + category
-                                }
-                            },
-                            label = { Text(category) },
-                        )
-                    }
+        // ---- 会话设置卡：决定怎么练（顺序/题量）----
+        ZhilianCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(stringResource(R.string.practice_card_session), style = MaterialTheme.typography.titleMedium)
+
+                // ---- 顺序 ----
+                SectionLabel(stringResource(R.string.practice_filter_order))
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = sequential,
+                        onClick = { sequential = true },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    ) { Text(stringResource(R.string.practice_order_sequential)) }
+                    SegmentedButton(
+                        selected = !sequential,
+                        onClick = { sequential = false },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    ) { Text(stringResource(R.string.practice_order_random)) }
                 }
-            }
-        }
 
-        // ---- 标签（跟随已选分类；比分类更细，承担挑专题刷的需求）----
-        if (selectedCategories.isEmpty()) {
-            Text(
-                stringResource(R.string.practice_tag_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else if (tags.isNotEmpty()) {
-            Text(stringResource(R.string.practice_filter_tag), style = MaterialTheme.typography.titleMedium)
-            // 用 FlowRow 而非每行固定个数：标签是长短不一的英文词，固定分栏会把长词压成竖排
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                tags.forEach { tag ->
-                    FilterChip(
-                        selected = tag in selectedTags,
-                        onClick = {
-                            selectedTags = if (tag in selectedTags) {
-                                selectedTags - tag
-                            } else {
-                                selectedTags + tag
+                // ---- 题量（入口行；滑块在半模态面板里，固定 10/20/50 档位数不够用）----
+                SectionLabel(stringResource(R.string.practice_filter_limit))
+                OutlinedButton(
+                    onClick = {
+                        limitDraft = limit
+                        showLimitSheet = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.practice_limit_value, limit))
+                }
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val questions = container.practiceRepository.pickQuestions(currentFilter())
+                            if (questions.isNotEmpty()) {
+                                onStartPractice(questions.map { it.questionId })
                             }
-                        },
-                        label = { Text(tag) },
-                    )
+                        }
+                    },
+                    enabled = matchedCount > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.practice_start))
                 }
             }
-        }
-
-        // ---- 题型 ----
-        if (types.isNotEmpty()) {
-            Text(stringResource(R.string.practice_filter_type), style = MaterialTheme.typography.titleMedium)
-            types.chunked(4).forEach { rowTypes ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowTypes.forEach { type ->
-                        FilterChip(
-                            selected = type in selectedTypes,
-                            onClick = {
-                                selectedTypes = if (type in selectedTypes) {
-                                    selectedTypes - type
-                                } else {
-                                    selectedTypes + type
-                                }
-                            },
-                            label = { Text(typeLabel(type)) },
-                        )
-                    }
-                }
-            }
-        }
-
-        // ---- 范围（两个开关取交集：同时打开 = 既答错过又被收藏）----
-        Text(stringResource(R.string.practice_filter_scope), style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = onlyWrong,
-                onClick = { onlyWrong = !onlyWrong },
-                label = { Text(stringResource(R.string.practice_scope_wrong_count, wrongCount)) },
-            )
-            FilterChip(
-                selected = onlyFavorite,
-                onClick = { onlyFavorite = !onlyFavorite },
-                label = { Text(stringResource(R.string.practice_scope_favorite_count, favoriteCount)) },
-            )
-        }
-
-        // ---- 顺序 ----
-        Text(stringResource(R.string.practice_filter_order), style = MaterialTheme.typography.titleMedium)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = sequential,
-                onClick = { sequential = true },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            ) { Text(stringResource(R.string.practice_order_sequential)) }
-            SegmentedButton(
-                selected = !sequential,
-                onClick = { sequential = false },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            ) { Text(stringResource(R.string.practice_order_random)) }
-        }
-
-        // ---- 题量（入口行；滑块在半模态面板里，固定 10/20/50 档位数不够用）----
-        Text(stringResource(R.string.practice_filter_limit), style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(
-            onClick = {
-                limitDraft = limit
-                showLimitSheet = true
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.practice_limit_value, limit))
-        }
-
-        Text(
-            stringResource(R.string.practice_matched_count, matchedCount),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Button(
-            onClick = {
-                scope.launch {
-                    val questions = container.practiceRepository.pickQuestions(currentFilter())
-                    if (questions.isNotEmpty()) {
-                        onStartPractice(questions.map { it.questionId })
-                    }
-                }
-            },
-            enabled = matchedCount > 0,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.practice_start))
         }
     }
 
@@ -357,6 +379,12 @@ fun PracticeHomeScreen(
             }
         }
     }
+}
+
+/** 卡内分组小标题： subordinate 于卡题（titleMedium），弱化为 labelLarge + 次级色 */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** 科目代码 → 展示名（Schema 里是小写代码） */

@@ -25,6 +25,9 @@
     <string name="clear_history_done">练习记录已清除。</string>
 
     <!-- 练习配置 -->
+    <!-- 练习配置页分组卡题：筛选维度一张卡，会话参数一张卡 -->
+    <string name="practice_card_filters">筛选条件</string>
+    <string name="practice_card_session">会话设置</string>
     <string name="practice_filter_subject">科目</string>
     <string name="practice_filter_category">分类</string>
     <string name="practice_filter_tag">标签</string>

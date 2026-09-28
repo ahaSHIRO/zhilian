@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
+import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
@@ -53,57 +53,71 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.settings_appearance),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(R.string.settings_theme_mode),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            ThemeMode.entries.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    selected = themeMode == mode,
-                    onClick = {
-                        scope.launch { container.settingsRepository.setThemeMode(mode) }
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = ThemeMode.entries.size,
-                    ),
-                ) {
-                    Text(stringResource(mode.labelRes))
+        // ---- 外观卡 ----
+        ZhilianCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_appearance),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.settings_theme_mode),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    ThemeMode.entries.forEachIndexed { index, mode ->
+                        SegmentedButton(
+                            selected = themeMode == mode,
+                            onClick = {
+                                scope.launch { container.settingsRepository.setThemeMode(mode) }
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = ThemeMode.entries.size,
+                            ),
+                        ) {
+                            Text(stringResource(mode.labelRes))
+                        }
+                    }
                 }
             }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        // ---- 数据卡 ----
+        ZhilianCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_data),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                OutlinedButton(onClick = onOpenBatches, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.settings_batch_import))
+                }
+                Text(
+                    text = stringResource(R.string.settings_batch_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-        Text(
-            text = stringResource(R.string.settings_data),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        OutlinedButton(onClick = onOpenBatches, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.settings_batch_import))
+                OutlinedButton(
+                    onClick = { confirmClear = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.settings_clear_history))
+                }
+                Text(
+                    text = stringResource(R.string.settings_clear_history_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Text(
-            text = stringResource(R.string.settings_batch_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        OutlinedButton(
-            onClick = { confirmClear = true },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.settings_clear_history))
-        }
-        Text(
-            text = stringResource(R.string.settings_clear_history_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 
     if (confirmClear) {
