@@ -2,6 +2,13 @@
 
 本规范约束「知练」题库的题目创作与把关流程。批次格式契约见 [`docs/schema/batch-spec-v1.md`](../schema/batch-spec-v1.md) 与 [`batch-v1.schema.json`](../schema/batch-v1.schema.json)；把关角色划分的依据见 [ADR-0006](../adr/0006-question-review-and-acceptance.md)。
 
+> **冷启动指引（外部出题代理从这里开始）**：本仓库即你的工作环境。出题前按下序读完：
+> 1. 本文全文——流程、单题质量标准、硬约束速查；
+> 2. [`docs/schema/batch-spec-v1.md`](../schema/batch-spec-v1.md)（字段与格式契约）与 [`batch-v1.schema.json`](../schema/batch-v1.schema.json)（权威 Schema）；
+> 3. [`CONTEXT.md`](../../CONTEXT.md)（领域词汇：科目/分类/标签/题目的身份语义）。
+>
+> 然后核对 §七 交接边界与 §八 标签词表。产出批次后必须自跑 §二.3 预校验并附通过输出，代码题自跑 §二.5 运行验证。你的角色边界在 §七，越界即返工。
+
 ## 一、角色分工
 
 | 角色 | 承担者 | 管什么 |
@@ -35,6 +42,7 @@
 - 题干含代码用 ```` ```kotlin ```` 围栏；**禁图片**（Schema 拦 `![`）、禁 HTML、禁表格
 - 题目尽量原创改写，不大段复制来源文本
 - `source` 必须可追溯（标题 + 访问日期 + 链接或笔记路径）
+- `tags` 每题 **1–3 个**，只能选自 §八 词表（新标签须维护者扩表，见 §八）
 
 ### 3. JSON 预校验（PC 端，必须做）
 
@@ -161,7 +169,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 - [ ] 干扰项长度风格一致，不泄漏答案，无"两个都对"
 - [ ] 解析必写部分齐全（为什么对 + 为什么错），按需部分不灌水
 - [ ] 来源真实、访问日期正确、与题目相关；概念题必须引官方文档 URL
-- [ ] 分类/标签用词与既有题库一致
+- [ ] 分类用词与 §五 一致；tags 每题 1–3 个且全部选自 §八 词表
 - [ ] 含代码者，代码自包含且**已实际运行核验**
 
 ## 四、JSON 预校验清单
@@ -208,3 +216,51 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 - 顶层 `additionalProperties: false`——**任何未定义字段都会导致整批校验失败**
 - `batchId` / `questionId` 为小写 UUID（`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`）
 - 文本首尾不得空白（`^\S(.*\S)?$`）
+
+## 七、外部出题代理交接边界
+
+出题由**独立上下文的代理**承担（通常为同机新会话）。边界如下，越界即返工：
+
+**环境与能力**：本机新会话，可读本仓库全部文件，可运行 `python` 与 §二.5 的 Kotlin 运行验证（本机路径对你可用）。
+
+**素材供给**：素材由维护者**每批指定**（Obsidian 笔记内容或菜鸟教程页面），出题代理不得自行选取网络来源。素材是菜鸟教程时，概念题的 `source` **仍必须引官方文档 URL**——菜鸟教程只作为理解素材，不作为事实权威，可与官方 URL 并列附上。
+
+**必须自跑**（产出随批次一并交付）：
+1. §二.3 `batch-check.py` 预校验，附**通过输出**（0 错误）
+2. 代码题的 §二.5 运行验证，附实际运行结果（含 §四.4 的 stdout/stderr 分流与稳定性实测）
+
+**禁止**：
+- **复审自己出的题**——冷复审由维护者另起的独立会话执行（ADR-0006 的独立性硬要求），同一会话自审共享盲点，一律无效
+- 修改规范文档、Schema、工具脚本——发现规范缺口或词表缺词，**报告维护者**按 §八 流程扩表，不得自行绕过
+- 触碰 Syncthing 批次目录——投放由维护者验收后执行（§二.6）
+
+**产出物清单**：批次 JSON 文件 + 预校验通过输出 + 代码题运行验证记录 + 考点清单（§二.1）。
+
+## 八、标签词表
+
+标签是练习配置页**最细的筛选维度**（App 中标签行跟随已选分类收窄），词表失控会让筛选直接退化。治理为**存量定死 + 增量扩表**的封闭词表。
+
+### 增量规则（出题代理逐条遵守）
+
+1. 每题 1–3 个，只能选自下表；跨分类复用是正常的（既有先例：`operators`、`collections`、`coroutines`）
+2. 全小写英文；API 名照抄小写（`withcontext`）；多词用连字符（`null-safety`）
+3. **禁止形态变体**：单复数、去连字符、缩写都视同新标签——同一概念只允许一个词形（`coroutines` ≠ `coroutine`），变体进词表只会分裂筛选、产生重复 chip
+4. 词表缺词：向维护者提议（标签 + 理由 + 拟归属分类），扩表后方可使用
+5. 新标签进入词表时同步登记到下表对应分类
+
+### Kotlin（存量 v1，2026-09-28 自 3 个批次整理）
+
+| 分类 | 合法标签 |
+|---|---|
+| 基础语法 | basics\*、equality、operators、variables |
+| 空安全 | null-safety、operators、collections |
+| 集合 | collections、immutable |
+| 函数 | functions、basics\* |
+| 协程基础 | async、cancellation、concurrency、coroutines、launch、runblocking、structured-concurrency、supervisorscope、withtimeout |
+| 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、undispatched、withcontext |
+
+\* `basics` 为弱标签（语义过泛），**冻结**——存量题保留，新题不得再使用。
+
+### Java / ArkTS
+
+暂无存量。首个 Java/ArkTS 批次出题时，由出题代理按增量规则提议、维护者扩表建档。
