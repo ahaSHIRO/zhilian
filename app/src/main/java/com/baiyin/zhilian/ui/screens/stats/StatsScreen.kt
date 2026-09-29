@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 
@@ -51,10 +52,10 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(ZhilianSpacing.screenEdge),
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap)) {
             StatCard(
                 label = stringResource(R.string.stats_questions),
                 value = questionCount.toString(),
@@ -92,7 +93,7 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
 @Composable
 private fun StatCard(label: String, value: String, progress: Double? = null, modifier: Modifier = Modifier) {
     ZhilianCard(modifier = modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(ZhilianSpacing.cardInner), verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.headlineMedium)
             progress?.let {

@@ -74,6 +74,8 @@ fun ZhilianTheme(
     CompositionLocalProvider(LocalZhilianDarkTheme provides darkTheme) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography = ZhilianTypography,
+            shapes = ZhilianShapes,
             content = {
                 Box(Modifier.fillMaxSize()) {
                     BackgroundFog(darkTheme = darkTheme)

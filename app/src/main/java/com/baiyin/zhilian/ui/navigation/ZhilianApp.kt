@@ -149,8 +149,9 @@ fun ZhilianApp(
             tabDestination(TopLevelDestination.PRACTICE.route) {
                 PracticeHomeScreen(
                     container = container,
-                    onStartPractice = { questionIds ->
+                    onStartPractice = { questionIds, shuffleOptions ->
                         navController.currentBackStackEntry?.savedStateHandle?.set("questionIds", questionIds)
+                        navController.currentBackStackEntry?.savedStateHandle?.set("shuffleOptions", shuffleOptions)
                         navController.navigate(ROUTE_PRACTICE_SESSION)
                     },
                 )
@@ -171,9 +172,12 @@ fun ZhilianApp(
                 // 题目 ID 由发起页 savedStateHandle 传递，经 NavController.previousBackStackEntry 读取（官方模式）
                 val questionIds = navController.previousBackStackEntry
                     ?.savedStateHandle?.get<List<String>>("questionIds").orEmpty()
+                val shuffleOptions = navController.previousBackStackEntry
+                    ?.savedStateHandle?.get<Boolean>("shuffleOptions") ?: true
                 PracticeSessionScreen(
                     container = container,
                     questionIds = questionIds,
+                    shuffleOptions = shuffleOptions,
                     onExit = { navController.popBackStack() },
                 )
             }

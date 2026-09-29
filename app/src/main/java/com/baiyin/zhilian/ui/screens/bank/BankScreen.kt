@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
@@ -58,11 +59,11 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             (!onlyFavorite || q.favorite)
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = ZhilianSpacing.screenEdge)) {
         if (categories.isNotEmpty()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = ZhilianSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
             ) {
                 categories.take(4).forEach { category ->
                     FilterChip(
@@ -78,7 +79,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
             ) {
                 FilterChip(
                     selected = onlyWrong,
@@ -98,14 +99,14 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
                 stringResource(R.string.bank_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 24.dp),
+                modifier = Modifier.padding(top = ZhilianSpacing.xl),
             )
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = ZhilianSpacing.sm),
         ) {
             items(filtered, key = { it.questionId }) { q ->
                 ZhilianCard(
@@ -114,7 +115,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
                         BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
                     } else null,
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 q.category,
@@ -152,8 +153,8 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = ZhilianSpacing.screenEdge),
+                verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
             ) {
                 Text(q.category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 QuestionMarkdown(content = q.stem)
@@ -175,7 +176,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
                         else stringResource(R.string.favorite_add)
                     )
                 }
-                TextButton(onClick = { detail = null }, modifier = Modifier.padding(bottom = 24.dp)) {
+                TextButton(onClick = { detail = null }, modifier = Modifier.padding(bottom = ZhilianSpacing.xl)) {
                     Text(stringResource(R.string.cancel))
                 }
             }

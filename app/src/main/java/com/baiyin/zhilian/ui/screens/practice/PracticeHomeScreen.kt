@@ -19,6 +19,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeFilter
@@ -58,7 +60,8 @@ private val StringSetSaver = Saver<Set<String>, List<String>>(
 )
 
 /**
- * 练习配置页：科目 + 分类 + 标签 + 题型 + 范围（全部/错题/收藏）+ 顺序/随机 + 数量。
+ * 练习配置页：筛选条件卡（科目 + 分类 + 标签 + 题型 + 范围 + 匹配数尾行）
+ * + 会话设置卡（顺序/随机 + 选项打乱开关 + 题量 + 开始练习），两卡语义分组。
  * 条件组合按 README 必须全部满足；题量不足时以现有题开练，不重复补足。
  *
  * 分类与标签都挂在科目下：选中科目后，chips 只显示该科目下的取值，
@@ -72,7 +75,7 @@ private val StringSetSaver = Saver<Set<String>, List<String>>(
 @Composable
 fun PracticeHomeScreen(
     container: AppContainer,
-    onStartPractice: (List<String>) -> Unit,
+    onStartPractice: (List<String>, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 用户手选的筛选状态走 Saveable（应用内保留，见 StringSetSaver 注释）；
@@ -88,6 +91,7 @@ fun PracticeHomeScreen(
     var onlyWrong by rememberSaveable { mutableStateOf(false) }
     var onlyFavorite by rememberSaveable { mutableStateOf(false) }
     var sequential by rememberSaveable { mutableStateOf(true) }
+    var shuffleOptions by rememberSaveable { mutableStateOf(true) }
     var limit by rememberSaveable { mutableStateOf(LIMIT_DEFAULT) }
     // 题量面板：草稿值在滑块里调，确定才写回 limit；面板开着时实时预览草稿值的匹配数
     var showLimitSheet by rememberSaveable { mutableStateOf(false) }
@@ -147,21 +151,21 @@ fun PracticeHomeScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(ZhilianSpacing.screenEdge),
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
     ) {
         // ---- 筛选条件卡：决定这次练什么（科目/分类/标签/题型/范围）----
         ZhilianCard(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(ZhilianSpacing.cardInner),
+                verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
             ) {
                 Text(stringResource(R.string.practice_card_filters), style = MaterialTheme.typography.titleMedium)
 
                 // ---- 科目 ----
                 if (subjects.isNotEmpty()) {
                     SectionLabel(stringResource(R.string.practice_filter_subject))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                         subjects.forEach { subject ->
                             FilterChip(
                                 selected = subject in selectedSubjects,
@@ -189,7 +193,7 @@ fun PracticeHomeScreen(
                 } else {
                     // 单层分类 chips，多选
                     categories.chunked(3).forEach { rowCategories ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                             rowCategories.forEach { category ->
                                 FilterChip(
                                     selected = category in selectedCategories,
@@ -217,7 +221,7 @@ fun PracticeHomeScreen(
                 } else if (tags.isNotEmpty()) {
                     SectionLabel(stringResource(R.string.practice_filter_tag))
                     // 用 FlowRow 而非每行固定个数：标签是长短不一的英文词，固定分栏会把长词压成竖排
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                         tags.forEach { tag ->
                             FilterChip(
                                 selected = tag in selectedTags,
@@ -238,7 +242,7 @@ fun PracticeHomeScreen(
                 if (types.isNotEmpty()) {
                     SectionLabel(stringResource(R.string.practice_filter_type))
                     types.chunked(4).forEach { rowTypes ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                             rowTypes.forEach { type ->
                                 FilterChip(
                                     selected = type in selectedTypes,
@@ -258,7 +262,7 @@ fun PracticeHomeScreen(
 
                 // ---- 范围（两个开关取交集：同时打开 = 既答错过又被收藏）----
                 SectionLabel(stringResource(R.string.practice_filter_scope))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                     FilterChip(
                         selected = onlyWrong,
                         onClick = { onlyWrong = !onlyWrong },
@@ -283,8 +287,8 @@ fun PracticeHomeScreen(
         // ---- 会话设置卡：决定怎么练（顺序/题量）----
         ZhilianCard(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(ZhilianSpacing.cardInner),
+                verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
             ) {
                 Text(stringResource(R.string.practice_card_session), style = MaterialTheme.typography.titleMedium)
 
@@ -301,6 +305,22 @@ fun PracticeHomeScreen(
                         onClick = { sequential = false },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                     ) { Text(stringResource(R.string.practice_order_random)) }
+                }
+
+                // ---- 选项打乱：单选/多选的选项行序按题稳定打乱，防背位置 ----
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.practice_shuffle_options),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = shuffleOptions,
+                        onCheckedChange = { shuffleOptions = it },
+                    )
                 }
 
                 // ---- 题量（入口行；滑块在半模态面板里，固定 10/20/50 档位数不够用）----
@@ -320,7 +340,7 @@ fun PracticeHomeScreen(
                         scope.launch {
                             val questions = container.practiceRepository.pickQuestions(currentFilter())
                             if (questions.isNotEmpty()) {
-                                onStartPractice(questions.map { it.questionId })
+                                onStartPractice(questions.map { it.questionId }, shuffleOptions)
                             }
                         }
                     },
@@ -342,8 +362,8 @@ fun PracticeHomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 24.dp),
+                    .padding(horizontal = ZhilianSpacing.xl)
+                    .padding(bottom = ZhilianSpacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -355,7 +375,7 @@ fun PracticeHomeScreen(
                     onValueChange = { limitDraft = it.roundToInt() },
                     valueRange = LIMIT_MIN.toFloat()..LIMIT_MAX.toFloat(),
                     steps = (LIMIT_MAX - LIMIT_MIN) / LIMIT_STEP - 1,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.sm),
                 )
                 Text(
                     stringResource(R.string.practice_matched_count, draftMatchedCount),
@@ -363,8 +383,8 @@ fun PracticeHomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.lg),
+                    horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm, Alignment.End),
                 ) {
                     TextButton(onClick = { limitDraft = LIMIT_DEFAULT }) {
                         Text(stringResource(R.string.practice_limit_reset))
@@ -392,6 +412,7 @@ private fun subjectLabel(code: String): String = when (code) {
     "kotlin" -> "Kotlin"
     "java" -> "Java"
     "arkts" -> "ArkTS"
+    "interview" -> "面试"
     else -> code
 }
 

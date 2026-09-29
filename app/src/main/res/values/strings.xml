@@ -47,6 +47,7 @@
     <string name="practice_filter_order">顺序</string>
     <string name="practice_order_sequential">顺序</string>
     <string name="practice_order_random">随机</string>
+    <string name="practice_shuffle_options">选项打乱</string>
     <string name="practice_filter_limit">题量</string>
     <string name="practice_limit_value">%1$d 题</string>
     <string name="practice_limit_apply">确定</string>
@@ -106,6 +107,11 @@
     <string name="batch_preview_line">顺序号 %1$d · 新题 %2$d · 停用 %3$d</string>
     <string name="batch_preview_fail">无法解析（不是合法批次）</string>
     <string name="batch_import_action">导入</string>
+    <string name="batch_import_all">全部导入</string>
+    <string name="batch_import_all_busy">导入中…</string>
+    <string name="batch_import_all_none">没有可导入的新批次</string>
+    <string name="batch_all_result_title">批量导入结果</string>
+    <string name="batch_all_result_line">%1$s：%2$s</string>
     <string name="batch_pending_duplicates">待决疑似重复</string>
     <string name="batch_duplicate_with">与已有题（%1$s…）题干相同</string>
     <string name="batch_review_duplicate">人工判定</string>

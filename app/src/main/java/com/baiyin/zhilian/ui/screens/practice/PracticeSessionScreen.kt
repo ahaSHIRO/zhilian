@@ -31,7 +31,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -50,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.batch.BatchJson
@@ -57,6 +57,7 @@ import com.baiyin.zhilian.data.batch.OptionDto
 import com.baiyin.zhilian.data.batch.SourceDto
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.practice.UserAnswer
+import kotlin.random.Random
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.ZhilianOptionRow
@@ -69,8 +70,9 @@ private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
 /**
  * 练习会话：一题一卡的卡片流（ADR-0003）。
  * - HorizontalPager 左右滑动切题，peek 露边暗示；滑动纯导航，未提交可滑回修改
- * - 提交后就地高亮 + 反馈横幅留在卡内；解析走半模态面板升起（ADR-0007）
- * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 完成）
+ * - 提交后就地高亮 + 反馈横幅留在卡内；解析走半模态面板，**双击已提交题卡**弹出（ADR-0007）
+ * - 选项打乱：按 questionId 种子稳定打乱单选/多选行序（开关在配置页，默认开）
+ * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 会话得分 + 完成）
  * - 首版退出不恢复会话（README），已提交作答保留在库中
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +80,7 @@ private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
 fun PracticeSessionScreen(
     container: AppContainer,
     questionIds: List<String>,
+    shuffleOptions: Boolean,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,8 +95,6 @@ fun PracticeSessionScreen(
     val submitting = remember { mutableStateMapOf<Int, Boolean>() }
     /** 当前升起半模态解析面板的题索引；null = 面板关闭（ADR-0007） */
     var explanationFor by remember { mutableStateOf<Int?>(null) }
-    /** 解析面板档位（会话内记忆）：双击打开按上次的档位，默认半屏；用户拖到全屏后记住 */
-    var explanationExpanded by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
@@ -122,7 +123,7 @@ fun PracticeSessionScreen(
 
     if (questions.isEmpty()) {
         Column(
-            modifier = modifier.fillMaxSize().padding(16.dp),
+            modifier = modifier.fillMaxSize().padding(ZhilianSpacing.screenEdge),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -152,10 +153,10 @@ fun PracticeSessionScreen(
             .fillMaxSize()
             .imePadding()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(vertical = 8.dp),
+            .padding(vertical = ZhilianSpacing.sm),
     ) {
         // 固定进度区（卡片外顶部）
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ZhilianSpacing.xl)) {
             Text(
                 stringResource(R.string.session_progress, (pagerState.currentPage + 1).coerceAtMost(pageCount), pageCount),
                 style = MaterialTheme.typography.labelLarge,
@@ -163,15 +164,15 @@ fun PracticeSessionScreen(
             )
             LinearProgressIndicator(
                 progress = { (pagerState.currentPage + 1f) / pageCount },
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.sm),
             )
         }
 
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 24.dp),
-            pageSpacing = 16.dp,
+            contentPadding = PaddingValues(horizontal = ZhilianSpacing.xl),
+            pageSpacing = ZhilianSpacing.lg,
         ) { page ->
             if (page == questions.size) {
                 SummaryCard(
@@ -195,6 +196,7 @@ fun PracticeSessionScreen(
                     result = submitted[page],
                     isSkipped = skipped.containsKey(page),
                     isSubmitting = submitting[page] == true,
+                    shuffleOptions = shuffleOptions,
                     onAnswerChange = { answers[page] = it },
                     onSubmit = {
                         val userAnswer = answers[page]
@@ -227,15 +229,11 @@ fun PracticeSessionScreen(
     if (sheetPage != null && sheetPage in questions.indices) {
         val question = questions[sheetPage]
         val result = submitted[sheetPage]
-        // 双击打开默认半屏；会话内记住用户拖到的档位，下次打开按上次的来（3b 决策）。
-        // 这版 M3 的 rememberModalBottomSheetState 无 initialValue 参数且 animateTo 已 internal，
-        // 故面板以半屏起步，打开后按记忆档位 expand()/partialExpand() 归位。
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-        LaunchedEffect(sheetState.currentValue) {
-            explanationExpanded = sheetState.currentValue == SheetValue.Expanded
-        }
+        // 双击打开默认全屏（skipPartiallyExpanded=true 跳过半屏档）；
+        // 短解析也无半屏露白、专注解析。下拉或点遮罩关闭，滑到下一题自动收起。
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         LaunchedEffect(sheetPage) {
-            if (explanationExpanded) sheetState.expand() else sheetState.partialExpand()
+            sheetState.expand()
         }
 
         ModalBottomSheet(
@@ -266,9 +264,9 @@ private fun ExplanationSheet(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = ZhilianSpacing.cardInner)
+            .padding(bottom = ZhilianSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
     ) {
         if (result != null) {
             Text(
@@ -302,16 +300,21 @@ private fun QuestionCard(
     result: SubmitResult?,
     isSkipped: Boolean,
     isSubmitting: Boolean,
+    shuffleOptions: Boolean,
     onAnswerChange: (UserAnswer) -> Unit,
     onSubmit: () -> Unit,
     onSkip: () -> Unit,
     onDoubleTap: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val options: List<OptionRow> = remember(question) {
+    // 选项打乱：以 questionId 为种子的稳定打乱——同一题在任何会话中顺序一致，
+    // 滑回上题不闪变；字母（optionId）跟内容走，判分与解析引用不受影响
+    val options: List<OptionRow> = remember(question, shuffleOptions) {
         question.optionsJson?.let {
             runCatching { BatchJson.json.decodeFromString<List<OptionDto>>(it) }.getOrNull()
-        }?.map { OptionRow(it.optionId, it.text) } ?: emptyList()
+        }?.map { OptionRow(it.optionId, it.text) }
+            ?.stablyShuffled(shuffleOptions, question.questionId.hashCode())
+            ?: emptyList()
     }
     val correctOptionIds: Set<String> = remember(question) {
         when (question.type) {
@@ -341,8 +344,8 @@ private fun QuestionCard(
         modifier = modifier
             .fillMaxSize()
             .then(
-                // 已提交后选项为只读，双击空白区（题干/选项间）弹出解析；
-                // 点在按钮或选项上被子级消费，双击天然不触发
+                // 已提交后双击卡片任意位置（含选项）弹出解析；
+                // 提交后选项只读、不挂 selectable/toggleable，不消费点击，父级双击覆盖整卡
                 if (onDoubleTap != null) {
                     Modifier.pointerInput(onDoubleTap) {
                         detectTapGestures(onDoubleTap = { onDoubleTap() })
@@ -356,9 +359,9 @@ private fun QuestionCard(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(ZhilianSpacing.cardInner)
                 .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
         ) {
             Text(pageLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             QuestionMarkdown(content = question.stem)
@@ -374,9 +377,9 @@ private fun QuestionCard(
                             isCorrect = isCorrect,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .selectable(selected = selected, enabled = !revealed) {
+                                .then(if (!revealed) Modifier.selectable(selected = selected) {
                                     onAnswerChange(UserAnswer.Single(option.optionId))
-                                },
+                                } else Modifier),
                         ) {
                             Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
                             QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
@@ -393,7 +396,7 @@ private fun QuestionCard(
                             isCorrect = isCorrect,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .toggleable(value = checked, enabled = !revealed) {
+                                .then(if (!revealed) Modifier.toggleable(value = checked) {
                                     val current = (userAnswer as? UserAnswer.Multiple)?.optionIds ?: emptySet()
                                     onAnswerChange(
                                         UserAnswer.Multiple(
@@ -401,7 +404,7 @@ private fun QuestionCard(
                                             else current + option.optionId
                                         )
                                     )
-                                },
+                                } else Modifier),
                         ) {
                             Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
                             QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
@@ -409,7 +412,7 @@ private fun QuestionCard(
                     }
                 }
                 "true_false" -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap)) {
                         listOf(
                             stringResource(R.string.tf_true) to true,
                             stringResource(R.string.tf_false) to false,
@@ -422,9 +425,9 @@ private fun QuestionCard(
                                 isCorrect = isCorrect,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .selectable(selected = selected, enabled = !revealed) {
+                                    .then(if (!revealed) Modifier.selectable(selected = selected) {
                                         onAnswerChange(UserAnswer.TrueFalse(value))
-                                    },
+                                    } else Modifier),
                                 containerColor = if (selected || isCorrect) {
                                     MaterialTheme.colorScheme.secondaryContainer
                                 } else {
@@ -434,7 +437,7 @@ private fun QuestionCard(
                                 Text(
                                     label,
                                     style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(4.dp).fillMaxWidth(),
+                                    modifier = Modifier.padding(ZhilianSpacing.xs).fillMaxWidth(),
                                 )
                             }
                         }
@@ -469,8 +472,8 @@ private fun QuestionCard(
             // 操作行：未提交时 跳过 + 提交；提交后由解析区替换
             if (!revealed) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.xs),
+                    horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
                 ) {
                     OutlinedButton(onClick = onSkip, modifier = Modifier.weight(1f)) {
                         Text(stringResource(R.string.session_skip))
@@ -527,7 +530,7 @@ private fun SummaryCard(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(ZhilianSpacing.xl),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -535,7 +538,7 @@ private fun SummaryCard(
             Text(
                 stringResource(R.string.session_summary_body, answered, perfect, skippedCount),
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(vertical = 16.dp),
+                modifier = Modifier.padding(vertical = ZhilianSpacing.lg),
             )
             Text(
                 stringResource(R.string.session_summary_score, score),
@@ -550,11 +553,11 @@ private fun SummaryCard(
                 )
                 Button(
                     onClick = { onJumpToUnanswered(firstUnansweredIndex) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.md),
                 ) {
                     Text(stringResource(R.string.session_jump_unanswered))
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(ZhilianSpacing.sm))
             }
             Button(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.session_done))
@@ -582,3 +585,12 @@ private fun SourceLine(question: QuestionEntity) {
 }
 
 private data class OptionRow(val optionId: String, val text: String)
+
+/**
+ * 选项行稳定打乱：开启时以 seed（questionId 哈希）重排行序，关闭时原样返回。
+ * 稳定含义：同一 seed 永远得到同一排列——滑回上题、重进会话、日后重刷同题都不闪变。
+ * 只重排不增删，元素字母（optionId）跟内容走，判分与解析引用不受影响。
+ * internal 以便单元测试覆盖（双射性/稳定性/开关行为）。
+ */
+internal fun <T> List<T>.stablyShuffled(enabled: Boolean, seed: Int): List<T> =
+    if (enabled) shuffled(Random(seed)) else this

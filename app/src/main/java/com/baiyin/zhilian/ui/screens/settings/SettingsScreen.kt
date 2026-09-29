@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
@@ -50,14 +51,14 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = ZhilianSpacing.screenEdge, vertical = ZhilianSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
     ) {
         // ---- 外观卡 ----
         ZhilianCard(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(ZhilianSpacing.cardInner),
+                verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
             ) {
                 Text(
                     text = stringResource(R.string.settings_appearance),
@@ -89,8 +90,8 @@ fun SettingsScreen(
         // ---- 数据卡 ----
         ZhilianCard(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(ZhilianSpacing.cardInner),
+                verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
             ) {
                 Text(
                     text = stringResource(R.string.settings_data),

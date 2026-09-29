@@ -15,6 +15,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.ui.theme.LocalZhilianDarkTheme
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
 import com.mikepenz.markdown.compose.LocalMarkdownPadding
@@ -85,7 +86,7 @@ private fun WrappingHighlightedCode(
     MarkdownCodeBackground(
         color = backgroundCodeColor,
         shape = RoundedCornerShape(cornerSize),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = ZhilianSpacing.sm),
     ) {
         // 关键差异：不套 horizontalScroll，文本按父容器宽度软换行
         MarkdownBasicText(
