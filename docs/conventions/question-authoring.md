@@ -285,7 +285,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 协程基础 | async、cancellation、concurrency、coroutines、launch、runblocking、structured-concurrency、supervisorscope、withtimeout |
 | 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、undispatched、withcontext |
 | 通道 | channel、capacity、collect、exception |
-| 数据流 | flow、state-flow、flowon、collect、exception、capacity |
+| 数据流 | flow、state-flow、shared-flow、replay、channel-flow、flowon、collect、exception、capacity |
 | 共享状态 | mutex、synchronized |
 | 测试&调试 | runtest、virtual-time、debug-agent、coroutine-name |
 
