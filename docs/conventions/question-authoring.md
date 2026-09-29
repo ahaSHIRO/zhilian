@@ -282,8 +282,8 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 空安全 | null-safety、operators、collections |
 | 集合 | collections、immutable |
 | 函数 | functions、basics\* |
-| 协程基础 | async、cancellation、concurrency、coroutines、launch、runblocking、structured-concurrency、supervisorscope、withtimeout |
-| 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、undispatched、withcontext |
+| 协程基础 | async、awaitall、cancellation、concurrency、coroutines、coroutinescope、exception-handler、global-scope、launch、runblocking、select、structured-concurrency、supervisorscope、withtimeout |
+| 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、unconfined、undispatched、withcontext |
 | 通道 | channel、capacity、collect、exception |
 | 数据流 | flow、state-flow、shared-flow、replay、channel-flow、flowon、collect、exception、capacity |
 | 共享状态 | mutex、synchronized |
