@@ -268,7 +268,7 @@ class BatchImportService(
         QuestionEntity(
             questionId = q.questionId,
             type = q.type,
-            subject = subject, // 取自批次 subject 字段（Schema 枚举 kotlin / java）
+            subject = subject, // 取自批次 subject 字段（Schema 枚举 kotlin / java / interview，arkts 占位）
             category = normalizeIdentity(q.category),
             tagsJson = BatchJson.json.encodeToString(q.tags.map { normalizeIdentity(it) }),
             // stem 也归一化落库：findByStem 用归一化值查询，若原样存则含首尾空白

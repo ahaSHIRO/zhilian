@@ -16,7 +16,7 @@ import com.baiyin.zhilian.data.db.ZhilianDatabase
  * 错题与收藏是两个独立开关，同时打开表示"既答错过、又被收藏"，即取交集。
  */
 data class PracticeFilter(
-    val subjects: Set<String> = emptySet(), // 空 = 不限科目（kotlin / java）
+    val subjects: Set<String> = emptySet(), // 空 = 不限科目（kotlin / java / interview）
     val categories: Set<String> = emptySet(), // 空 = 不限分类
     val types: Set<String> = emptySet(), // 空 = 不限题型（single_choice 等）
     val tags: Set<String> = emptySet(), // 空 = 不限标签；比分类更细粒度，取并集

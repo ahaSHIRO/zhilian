@@ -16,7 +16,7 @@
 | batchId | UUID | ✓ | 批次唯一 ID，永不复用 |
 | batchOrder | 整数 1–9999 | ✓ | 批次顺序号，决定顺序练习追加次序 |
 | createdAt | date | ✓ | 创建日期 YYYY-MM-DD |
-| subject | 枚举 | ✓ | 科目代码，小写；当前为 `kotlin`、`java`、`arkts`（占位，暂无题）。扩科目须改 Schema |
+| subject | 枚举 | ✓ | 科目代码，小写；当前为 `kotlin`、`java`、`interview`，另有 `arkts`（占位，暂无题）。扩科目须改 Schema |
 | questions | 数组 1–200 | ✓ | 新增题目，数组顺序即批次文件内顺序 |
 | retiredQuestionIds | UUID 数组 | ✗ | 本批次停用的既有题目 ID，默认空 |
 
@@ -34,7 +34,7 @@
 ## ID 与身份规范
 
 - **batchId / questionId**：小写 UUID v4，全局唯一、永不复用、与内容无关联。题目修订 = 新 questionId（见 ADR-0001），旧题与其历史不变。
-- **科目**：小写代码，Schema 枚举锁定。新科目必须改 Schema——这是有意的防错设计，防止出题端笔误在题库中制造野科目。
+- **科目**：小写代码，Schema 枚举锁定。新科目必须改 Schema——这是有意的防错设计，防止出题端笔误在题库中制造野科目。`interview` 为面试科目：分类承载题源（基础面试题/常见面试题），标签承载知识域；开放问答式面试原题须拆解为封闭题型（见 docs/conventions/question-authoring.md §九）。
 - **分类**：名字即身份。同一科目内，Unicode NFC 规范化 + trim 后的精确字符串相同即为同一分类。单层无层级；分类无独立 ID，**分类名一旦使用即不建议改名**（改名会形成新分类，旧题归属不变）。
 - **标签**：身份规则同分类（NFC + trim 精确匹配、区分大小写），出题规约建议全小写；跨科目允许同名。
 
