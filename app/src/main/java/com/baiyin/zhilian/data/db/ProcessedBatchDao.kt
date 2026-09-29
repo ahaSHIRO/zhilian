@@ -11,7 +11,7 @@ interface ProcessedBatchDao {
     @Upsert
     suspend fun upsert(record: ProcessedBatchEntity)
 
-    @Query("SELECT * FROM processed_batches ORDER BY batch_order")
+    @Query("SELECT * FROM processed_batches ORDER BY batch_order DESC")
     fun observeAll(): Flow<List<ProcessedBatchEntity>>
 
     @Query("SELECT * FROM processed_batches WHERE batch_id = :batchId")

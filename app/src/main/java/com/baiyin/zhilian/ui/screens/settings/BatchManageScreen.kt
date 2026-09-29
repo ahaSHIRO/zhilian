@@ -1,34 +1,39 @@
 package com.baiyin.zhilian.ui.screens.settings
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
@@ -36,13 +41,18 @@ import com.baiyin.zhilian.data.batch.BatchFileDto
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.ImportOutcome
 import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 目录扫描结果：文件 + 预解析 DTO（非法批次为 null） */
+private data class ScannedBatch(val file: DocumentFile, val dto: BatchFileDto?)
+
 /**
- * 批次管理：SAF 授权 Syncthing 批次目录 → 扫描待处理批次 → 确认导入 → 结果报告；
- * 疑似重复逐条人工决策（README 导入韧性）。
+ * 批次管理：SAF 授权 Syncthing 批次目录 → 自动/手动扫描待处理批次 → 单个或全部导入 →
+ * 结果报告；疑似重复逐条人工决策（README 导入韧性）。
+ * 目录文件与已处理批次均按 batchOrder 倒序（最新批次在最上）。
  */
 @Composable
 fun BatchManageScreen(
@@ -52,6 +62,7 @@ fun BatchManageScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val treeUri by container.settingsRepository.batchTreeUri
         .collectAsStateWithLifecycle(initialValue = null)
     val processedBatches by container.database.processedBatchDao().observeAll()
@@ -59,10 +70,12 @@ fun BatchManageScreen(
     val pendingDuplicates by container.database.pendingDuplicateDao().observeAll()
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
-    var dirFiles by remember(treeUri) { mutableStateOf<List<DocumentFile>>(emptyList()) }
+    var batches by remember { mutableStateOf<List<ScannedBatch>>(emptyList()) }
     var importOutcome by remember { mutableStateOf<ImportOutcome?>(null) }
     var resolving by remember { mutableStateOf<com.baiyin.zhilian.data.db.PendingDuplicateEntity?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var importingAll by remember { mutableStateOf(false) }
+    var allOutcomes by remember { mutableStateOf<List<Pair<String, ImportOutcome>>?>(null) }
 
     val dirPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -77,39 +90,82 @@ fun BatchManageScreen(
         }
     }
 
-    // 扫描批次目录中的 .json 文件
-    LaunchedEffect(treeUri) {
-        dirFiles = treeUri?.let { uri ->
-            withContext(Dispatchers.IO) {
-                val dir = DocumentFile.fromTreeUri(context, uri)
-                dir?.listFiles()?.filter { it.isFile && it.name?.endsWith(".json") == true }
-                    ?.sortedBy { it.name }
+    // 扫描批次目录：列出 .json 并预解析 DTO；按 batchOrder 倒序（解析失败的沉底、按文件名倒序）
+    suspend fun scan(uri: Uri): List<ScannedBatch> = withContext(Dispatchers.IO) {
+        val dir = DocumentFile.fromTreeUri(context, uri)
+        dir?.listFiles()
+            ?.filter { it.isFile && it.name?.endsWith(".json") == true }
+            ?.map { f ->
+                val dto = runCatching {
+                    context.contentResolver.openInputStream(f.uri)
+                        ?.bufferedReader()?.use { it.readText() }
+                        ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
+                }.getOrNull()
+                ScannedBatch(f, dto)
             }
-        } ?: emptyList()
+            ?.sortedWith(
+                compareByDescending<ScannedBatch> { it.dto?.batchOrder ?: Int.MIN_VALUE }
+                    .thenByDescending { it.file.name ?: "" },
+            )
+            ?: emptyList()
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
-            TextButton(onClick = { dirPicker.launch(null) }) {
-                Text(stringResource(if (treeUri == null) R.string.batch_pick_dir else R.string.batch_change_dir))
+    // 每次回到页面（含选完目录返回、Syncthing 同步后切回）自动重扫
+    DisposableEffect(lifecycleOwner, treeUri) {
+        val uri = treeUri
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && uri != null) {
+                scope.launch { batches = scan(uri) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (uri != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            scope.launch { batches = scan(uri) }
+        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun isImported(sb: ScannedBatch): Boolean {
+        val p = sb.dto ?: return false
+        return processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            horizontal = ZhilianSpacing.screenEdge,
+            vertical = ZhilianSpacing.screenEdge,
+        ),
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
+    ) {
+        // 顶部操作行
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+                TextButton(onClick = { dirPicker.launch(null) }) {
+                    Text(stringResource(if (treeUri == null) R.string.batch_pick_dir else R.string.batch_change_dir))
+                }
             }
         }
 
         if (treeUri == null) {
-            Text(
-                stringResource(R.string.batch_no_dir),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            item {
+                Text(
+                    stringResource(R.string.batch_no_dir),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         // 待决疑似重复
         if (pendingDuplicates.isNotEmpty()) {
-            Text(stringResource(R.string.batch_pending_duplicates), style = MaterialTheme.typography.titleMedium)
-            pendingDuplicates.forEach { item ->
+            item {
+                Text(stringResource(R.string.batch_pending_duplicates), style = MaterialTheme.typography.titleMedium)
+            }
+            items(pendingDuplicates, key = { "${it.batchId}/${it.questionId}" }) { item ->
                 ZhilianCard {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
                         Text(
                             stringResource(R.string.batch_duplicate_with, item.existingQuestionId.take(8)),
                             style = MaterialTheme.typography.labelMedium,
@@ -120,7 +176,7 @@ fun BatchManageScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 2,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                             TextButton(onClick = { resolving = item }) {
                                 Text(stringResource(R.string.batch_review_duplicate))
                             }
@@ -131,98 +187,119 @@ fun BatchManageScreen(
         }
 
         // 目录中的批次文件
-        if (dirFiles.isNotEmpty()) {
-            Text(stringResource(R.string.batch_dir_files), style = MaterialTheme.typography.titleMedium)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(dirFiles, key = { it.uri.toString() }) { file ->
-                    var preview by remember(file.uri) { mutableStateOf<BatchFileDto?>(null) }
-                    LaunchedEffect(file.uri) {
-                        preview = withContext(Dispatchers.IO) {
-                            runCatching {
-                                context.contentResolver.openInputStream(file.uri)
-                                    ?.bufferedReader()?.use { it.readText() }
-                                    ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
-                            }.getOrNull()
-                        }
-                    }
-                    val processed = preview?.let { p ->
-                        processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
-                    } == true
-                    ZhilianCard(
-                        containerColor = if (processed) MaterialTheme.colorScheme.surface
-                        else MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Column {
-                                Text(file.name ?: "?", style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    preview?.let {
-                                        stringResource(
-                                            R.string.batch_preview_line,
-                                            it.batchOrder, it.questions.size, it.retiredQuestionIds.size,
+        if (batches.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.batch_dir_files), style = MaterialTheme.typography.titleMedium)
+                    FilledTonalButton(
+                        enabled = !busy && !importingAll,
+                        onClick = {
+                            scope.launch {
+                                importingAll = true
+                                val results = mutableListOf<Pair<String, ImportOutcome>>()
+                                batches.forEach { sb ->
+                                    if (sb.dto != null && !isImported(sb)) {
+                                        val outcome = container.importService.importFromUri(
+                                            sb.file.uri, sb.file.name ?: "batch.json",
                                         )
-                                    } ?: stringResource(R.string.batch_preview_fail),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Button(
-                                enabled = !busy && preview != null && !processed,
-                                onClick = {
-                                    scope.launch {
-                                        busy = true
-                                        importOutcome = container.importService.importFromUri(
-                                            file.uri, file.name ?: "batch.json",
-                                        )
-                                        busy = false
+                                        results += (sb.file.name ?: "batch.json") to outcome
                                     }
-                                },
-                            ) {
-                                Text(stringResource(R.string.batch_import_action))
+                                }
+                                importingAll = false
+                                allOutcomes = results
                             }
+                        },
+                    ) {
+                        Text(stringResource(
+                            if (importingAll) R.string.batch_import_all_busy else R.string.batch_import_all,
+                        ))
+                    }
+                }
+            }
+            items(batches, key = { it.file.uri.toString() }) { sb ->
+                val preview = sb.dto
+                val processed = isImported(sb)
+                ZhilianCard(
+                    containerColor = if (processed) MaterialTheme.colorScheme.surface
+                    else MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(ZhilianSpacing.cardInnerCompact),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(sb.file.name ?: "?", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                preview?.let {
+                                    stringResource(
+                                        R.string.batch_preview_line,
+                                        it.batchOrder, it.questions.size, it.retiredQuestionIds.size,
+                                    )
+                                } ?: stringResource(R.string.batch_preview_fail),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(
+                            enabled = !busy && !importingAll && preview != null && !processed,
+                            onClick = {
+                                scope.launch {
+                                    busy = true
+                                    importOutcome = container.importService.importFromUri(
+                                        sb.file.uri, sb.file.name ?: "batch.json",
+                                    )
+                                    busy = false
+                                }
+                            },
+                        ) {
+                            Text(stringResource(R.string.batch_import_action))
                         }
                     }
                 }
             }
         }
 
-        HorizontalDivider()
+        item { HorizontalDivider(modifier = Modifier.padding(vertical = ZhilianSpacing.xs)) }
 
-        // 已处理批次
-        Text(stringResource(R.string.batch_processed_title), style = MaterialTheme.typography.titleMedium)
-        if (processedBatches.isEmpty()) {
-            Text(
-                stringResource(R.string.batch_processed_empty),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // 已处理批次（DAO 已按 batch_order DESC 返回）
+        item {
+            Text(stringResource(R.string.batch_processed_title), style = MaterialTheme.typography.titleMedium)
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(processedBatches, key = { it.batchId }) { b ->
-                ZhilianCard {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            stringResource(
-                                R.string.batch_processed_counts,
-                                b.importedCount, b.skippedCount, b.failedCount, b.pendingDuplicateCount,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+        if (processedBatches.isEmpty()) {
+            item {
+                Text(
+                    stringResource(R.string.batch_processed_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        items(processedBatches, key = { it.batchId }) { b ->
+            ZhilianCard {
+                Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+                    Text(
+                        stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.batch_processed_counts,
+                            b.importedCount, b.skippedCount, b.failedCount, b.pendingDuplicateCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
     }
 
-    // 导入结果报告
+    // 单批导入结果报告
     importOutcome?.let { outcome ->
         AlertDialog(
             onDismissRequest = { importOutcome = null },
@@ -238,7 +315,7 @@ fun BatchManageScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                     when (outcome) {
                         is ImportOutcome.Failed -> {
                             Text(outcome.reason)
@@ -290,6 +367,42 @@ fun BatchManageScreen(
         )
     }
 
+    // 全部导入汇总报告
+    allOutcomes?.let { outcomes ->
+        AlertDialog(
+            onDismissRequest = { allOutcomes = null },
+            confirmButton = {
+                TextButton(onClick = { allOutcomes = null }) { Text(stringResource(R.string.ok)) }
+            },
+            title = { Text(stringResource(R.string.batch_all_result_title)) },
+            text = {
+                if (outcomes.isEmpty()) {
+                    Text(stringResource(R.string.batch_import_all_none))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                        outcomes.forEach { (name, outcome) ->
+                            val summary = when (outcome) {
+                                is ImportOutcome.Completed ->
+                                    stringResource(
+                                        R.string.batch_result_counts,
+                                        outcome.importedCount, outcome.skippedCount,
+                                        outcome.failedCount, outcome.retiredCount,
+                                    ) + if (outcome.duplicates.isNotEmpty())
+                                        " " + stringResource(R.string.batch_result_duplicates, outcome.duplicates.size)
+                                    else ""
+                                is ImportOutcome.Failed -> outcome.reason.lineSequence().firstOrNull() ?: "失败"
+                            }
+                            Text(
+                                stringResource(R.string.batch_all_result_line, name, summary),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     // 疑似重复决策对话框
     resolving?.let { item ->
         DuplicateResolveDialog(
@@ -318,7 +431,7 @@ private fun DuplicateResolveDialog(
         onDismissRequest = onResolved,
         title = { Text(stringResource(R.string.batch_review_duplicate)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                 Text(
                     stringResource(R.string.batch_duplicate_new),
                     style = MaterialTheme.typography.labelMedium,
