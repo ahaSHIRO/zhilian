@@ -29,6 +29,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // 个人分发：用 debug 签名（与已装 debug 版同签名，可覆盖安装保留数据）
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -56,8 +58,11 @@ val copyBatchSchema = tasks.register<Copy>("copyBatchSchema") {
     into(layout.buildDirectory.dir("generated/batchSchema"))
 }
 
-// AGP 不感知 sourceSets 中任务输出的依赖，显式挂在 assets 合并任务前
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+// AGP 不感知 sourceSets 中任务输出的依赖。Schema copy 挂在 preBuild 根任务上——
+// 各变体的 mergeAssets 与 release 的 lintVital 流水线（generateReleaseLintVitalReportModel 等）
+// 都传递依赖 preBuild，一处声明全覆盖（曾只在 mergeAssets/lintVitalAnalyze 挂依赖，
+// release 构建仍报 lintVital 任务组隐式依赖缺失）
+tasks.matching { it.name == "preBuild" }
     .configureEach { dependsOn(copyBatchSchema) }
 
 ksp {
