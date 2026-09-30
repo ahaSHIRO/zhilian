@@ -36,7 +36,7 @@ import com.baiyin.zhilian.data.question.QuestionContent
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
-import com.baiyin.zhilian.ui.components.asLoadable
+import com.baiyin.zhilian.ui.components.collectAsLoadable
 import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.launch
@@ -50,10 +50,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
-    val questionsLoad by container.questionBank.observeQuestions().asLoadable()
-        .collectAsStateWithLifecycle(initialValue = Loadable.FirstLoad)
-    val categoriesLoad by container.questionBank.observeCategories().asLoadable()
-        .collectAsStateWithLifecycle(initialValue = Loadable.FirstLoad)
+    // 流持有稳定实例：否则每次重组都重订阅一次（功能正确，但白查一次库）。
+    // 首帧门控走 collectAsLoadable：值到达后不会因重订阅回落首帧态（见 LoadableState 说明）
+    val questionsFlow = remember(container) { container.questionBank.observeQuestions() }
+    val categoriesFlow = remember(container) { container.questionBank.observeCategories() }
+    val questionsLoad by questionsFlow.collectAsLoadable()
+    val categoriesLoad by categoriesFlow.collectAsLoadable()
 
     val ready = questionsLoad is Loadable.Data && categoriesLoad is Loadable.Data
     val allQuestions = (questionsLoad as? Loadable.Data)?.value.orEmpty()
@@ -182,9 +184,9 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
     val openId = detailId
     if (openId != null) {
         // 按 id 订阅：抱点击瞬间的快照会让收藏按钮永远读旧值——点了不换文案、
-        // 再点还是写同一个目标值，从面板里根本取消不了收藏
-        val question by container.questionBank.observeQuestion(openId)
-            .collectAsStateWithLifecycle(initialValue = null)
+        // 再点还是写同一个目标值，从面板里根本取消不了收藏。流同样 remember 住以免重订阅
+        val questionFlow = remember(openId) { container.questionBank.observeQuestion(openId) }
+        val question by questionFlow.collectAsStateWithLifecycle(initialValue = null)
         val q = question
         if (q != null) {
             ModalBottomSheet(onDismissRequest = { detailId = null }) {

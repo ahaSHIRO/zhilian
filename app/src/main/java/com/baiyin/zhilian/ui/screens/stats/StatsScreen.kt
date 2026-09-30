@@ -21,13 +21,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.db.CategoryWrongRow
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
-import com.baiyin.zhilian.ui.components.asLoadable
+import com.baiyin.zhilian.ui.components.collectAsLoadable
 import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.flow.combine
@@ -54,12 +53,15 @@ private const val PENDING = "—"
  */
 @Composable
 fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
-    val counts by combine(
-        container.questionBank.observeCount(),
-        container.practiceRepository.observeRecordCount(),
-    ) { questions, records -> questions to records }
-        .asLoadable()
-        .collectAsStateWithLifecycle(initialValue = Loadable.FirstLoad)
+    // 流持有稳定实例（否则每次重组都重订阅、白查库）；首帧门控走 collectAsLoadable，
+    // 值到达后不会因重订阅回落首帧态（见 LoadableState 说明）
+    val countsFlow = remember(container) {
+        combine(
+            container.questionBank.observeCount(),
+            container.practiceRepository.observeRecordCount(),
+        ) { questions, records -> questions to records }
+    }
+    val counts by countsFlow.collectAsLoadable()
 
     var aggregates by remember { mutableStateOf<Loadable<StatsAggregates>>(Loadable.FirstLoad) }
     LaunchedEffect(Unit) {
