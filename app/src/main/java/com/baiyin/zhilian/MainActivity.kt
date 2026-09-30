@@ -6,8 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.baiyin.zhilian.data.ThemeMode
 import com.baiyin.zhilian.ui.navigation.ZhilianApp
-import com.baiyin.zhilian.ui.theme.ThemeMode
 import com.baiyin.zhilian.ui.theme.ZhilianTheme
 
 /**

@@ -31,7 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.BottomBarStyle
-import com.baiyin.zhilian.ui.theme.ThemeMode
+import com.baiyin.zhilian.data.ThemeMode
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.isLiquidGlassSupported
 import com.baiyin.zhilian.ui.components.label

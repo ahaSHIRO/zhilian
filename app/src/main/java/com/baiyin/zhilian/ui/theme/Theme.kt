@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalView
+import com.baiyin.zhilian.data.ThemeMode
 
 /**
  * App 主题解析后的深色态，供无法直接拿 themeMode 的深层组件使用。
