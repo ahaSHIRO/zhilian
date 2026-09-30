@@ -37,7 +37,7 @@ import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.isLiquidGlassSupported
 import com.baiyin.zhilian.ui.components.label
-import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
+import com.baiyin.zhilian.ui.components.BottomBarTrailingSpacer
 import kotlinx.coroutines.launch
 
 /**
@@ -60,8 +60,6 @@ fun SettingsScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var showCleared by remember { mutableStateOf(false) }
 
-    // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
-    val bottomBarPadding = rememberBottomBarContentPadding()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -169,7 +167,8 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(bottomBarPadding))
+        // 底栏是浮层、内容穿到它背后（ADR-0010）：尾部为底栏预留空间
+        BottomBarTrailingSpacer()
     }
 
     if (confirmClear) {

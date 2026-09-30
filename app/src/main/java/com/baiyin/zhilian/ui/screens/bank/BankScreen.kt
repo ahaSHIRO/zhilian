@@ -128,7 +128,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
 
             // 底栏是浮层、内容穿到它背后（ADR-0010）：列表底部留出底栏高度，
             // 否则最后一道题被永久遮住。用 contentPadding 而非外层 padding，内容才能滚到底栏背后。
-            val bottomBarPadding = rememberBottomBarContentPadding()
+            val bottomBarPadding = rememberBottomBarContentPadding().calculateBottomPadding()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),

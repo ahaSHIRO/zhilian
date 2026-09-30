@@ -106,8 +106,8 @@ private fun NavGraphBuilder.tabDestination(
  * 单 Scaffold + 悬浮底栏 + NavHost 的应用外壳。
  *
  * 底栏是**浮层**（ADR-0010）：内容延伸到屏幕底部、穿到底栏背后，玻璃才有内容可折射。
- * 因此这里只避让**状态栏**，底部避让由各 tab 屏自行用 `rememberBottomBarContentPadding()`
- * 留白（`LazyColumn` 走 `contentPadding`，`verticalScroll` 在末尾加 Spacer）。
+ * 因此这里只避让**状态栏**，底部避让由各 tab 屏自行用底栏模块的两个 adapter
+ * 留白（`BottomBarTrailingSpacer()` / `rememberBottomBarContentPadding()`）。
  * 子系统避让总规范见 docs/conventions/edge-to-edge.md。
  *
  * 背景光雾与底栏折射源是同一份：外壳录一份 layerBackdrop（底色 + 光雾 + 页面内容），

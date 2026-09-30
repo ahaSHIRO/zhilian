@@ -27,7 +27,7 @@ import com.baiyin.zhilian.data.db.CategoryWrongRow
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.collectAsLoadable
-import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
+import com.baiyin.zhilian.ui.components.BottomBarTrailingSpacer
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.flow.combine
 
@@ -81,8 +81,6 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
     val agg = (aggregates as? Loadable.Data)?.value
     val ready = countPair != null && agg != null
 
-    // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
-    val bottomBarPadding = rememberBottomBarContentPadding()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -130,7 +128,8 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
                 ?.joinToString(" · ") { "${it.category} ${it.wrongCount}" }
                 ?.ifEmpty { stringResource(R.string.stats_no_wrong) },
         )
-        Spacer(modifier = Modifier.height(bottomBarPadding))
+        // 底栏是浮层、内容穿到它背后（ADR-0010）：尾部为底栏预留空间
+        BottomBarTrailingSpacer()
     }
 }
 

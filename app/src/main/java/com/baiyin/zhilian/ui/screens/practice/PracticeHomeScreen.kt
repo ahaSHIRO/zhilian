@@ -41,7 +41,7 @@ import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeSelection
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
-import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
+import com.baiyin.zhilian.ui.components.BottomBarTrailingSpacer
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -180,8 +180,6 @@ fun PracticeHomeScreen(
         favoriteCount = container.questionPicker.favoriteCount(filter)
     }
 
-    // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
-    val bottomBarPadding = rememberBottomBarContentPadding()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -381,7 +379,8 @@ fun PracticeHomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(bottomBarPadding))
+        // 底栏是浮层、内容穿到它背后（ADR-0010）：尾部为底栏预留空间，最后一张卡不被遮
+        BottomBarTrailingSpacer()
     }
 
     // 题量半模态面板：草稿值随滑块走，确定才写回；与解析面板同一交互语言（ADR-0007）

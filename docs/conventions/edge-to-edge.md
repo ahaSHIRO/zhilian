@@ -24,9 +24,9 @@
 底栏改为**悬浮胶囊浮层**后，避让模型与 M3 `NavigationBar` 时代不同，必须遵守：
 
 1. **外壳只避让状态栏**：`ZhilianApp` 的 NavHost 只 `padding(top = innerPadding.calculateTopPadding())`，**不再给底部避让**——内容穿到底栏背后，玻璃才有内容可折射。
-2. **各 tab 屏自行留底部空间**：用 `rememberBottomBarContentPadding()`（底栏高 + 上下留白 + 手势条），否则最后一项/最后一张卡被底栏永久遮住。
-   - `LazyColumn`：`contentPadding = PaddingValues(bottom = …)`
-   - `verticalScroll` 的 Column：**内容末尾加 `Spacer(height = …)`**，不能用外层 padding（外层 padding 会把内容截在底栏之上，穿透失效）。
+2. **各 tab 屏自行留底部空间**：底栏模块提供两个 adapter，对应仅有的两种合法用法（否则最后一项/最后一张卡被底栏永久遮住；当外层 padding 会把内容截在底栏之上，穿透失效）：
+   - `verticalScroll` 的 Column：**内容末尾放 `BottomBarTrailingSpacer()`**
+   - `LazyColumn`：`contentPadding` 底部用 `rememberBottomBarContentPadding()`（与顶部间距自行拼接）
 3. **无底栏的屏不受影响**：练习会话页、批次管理页不显示底栏，保持各自现有的 `windowInsetsPadding` 避让，不需加底部留白。
 4. **底栏不可被内容覆盖**：外壳中底栏绘制在 NavHost **之后**（`Box` 内后声明），保证它在最上层。
 5. **拖动切换与返回手势**（ADR-0010 修订）：底栏支持按住水平拖动切换 tab。最左 tab 距屏幕左缘约 20dp（16dp `screenEdge` + 4dp 内边距），可能与系统返回手势的触发区（通常边缘 20–24dp）重叠。若实测出现「从最左往右拖触发返回而非拖动」，加大左右安全边距或限制边缘起拖——**这是已知待验证项，不是未实现的缺陷**。

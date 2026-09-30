@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -74,6 +75,9 @@ import kotlin.math.roundToInt
 /** 底栏高度（悬浮胶囊形态，与官方示例一致） */
 private val BAR_HEIGHT = 64.dp
 
+/** 底栏本体的上下留白：渲染链与底部留白公式共用同一常量，改一处两侧自动同步 */
+private val BAR_VERTICAL_PADDING = ZhilianSpacing.sm
+
 /** 整条 bar 按下时的外扩量（官方为 16dp，这里取等比近似值） */
 private val BAR_PRESS_EXPAND = 10.dp
 
@@ -114,7 +118,8 @@ private val BAR_INNER_SHADOW = 10.dp
  * - **纵向滑动** → 不接管（原地弹回），把事件留给下层，不堵住未来的纵向手势。
  *
  * 底栏是**浮层**：调用方必须让页面内容延伸到屏幕底部（不给底部避让），否则玻璃背后没有
- * 可折射的内容、效果会退化成一块半透明色块。各屏用 [rememberBottomBarContentPadding] 留白。
+ * 可折射的内容、效果会退化成一块半透明色块。各屏用 [BottomBarTrailingSpacer] 或
+ * [rememberBottomBarContentPadding] 留白——两种 adapter 对应仅有的两种合法用法。
  */
 @Composable
 fun ZhilianBottomBar(
@@ -142,7 +147,7 @@ fun ZhilianBottomBar(
             .fillMaxWidth()
             // 底栏自身避开手势条与键盘：内容穿到底栏背后，但底栏不能压在小白条上
             .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-            .padding(horizontal = ZhilianSpacing.screenEdge, vertical = ZhilianSpacing.sm),
+            .padding(horizontal = ZhilianSpacing.screenEdge, vertical = BAR_VERTICAL_PADDING),
     ) {
         val slotWidth = maxWidth / destinations.size
         val progress = dragState.pressProgress
@@ -266,17 +271,41 @@ private fun Modifier.dragToSwitch(
 private val DRAG_TOUCH_SLOP = 12.dp
 
 /**
- * 页面内容为底栏预留的底部空间（底栏高度 + 其上下留白 + 系统手势条）。
- *
- * - `LazyColumn` 用 `contentPadding = PaddingValues(bottom = …)`
- * - `verticalScroll` 的 Column 在**内容末尾**加一个该高度的 `Spacer`
- *   （不能用外层 padding，否则内容无法滚到底栏背后、失去穿透效果）
+ * tab 屏底部留白高度（纯算术，供 JVM 单测锁定）：
+ * 底栏高度 + 上下留白 ×2 + 系统手势条。
  */
+internal fun bottomBarContentHeight(
+    barHeight: Dp,
+    verticalPadding: Dp,
+    navigationBarBottom: Dp,
+): Dp = barHeight + verticalPadding * 2 + navigationBarBottom
+
 @Composable
-fun rememberBottomBarContentPadding(): Dp {
-    val bars = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    return BAR_HEIGHT + ZhilianSpacing.sm * 2 + bars
+private fun rememberBottomBarReservedHeight(): Dp {
+    val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return bottomBarContentHeight(BAR_HEIGHT, BAR_VERTICAL_PADDING, navBar)
 }
+
+/**
+ * tab 屏底部留白的两种 adapter（ADR-0010：内容穿到底栏背后，玻璃才有可折射物）。
+ *
+ * 「预留高度只能当尾部 Spacer 或 contentPadding、不能当外层 padding（否则内容
+ * 滚不到底栏背后、穿透失效）」这条约束由接口形态保证——调用方能拿到的只有：
+ *
+ * - [BottomBarTrailingSpacer]：`verticalScroll` 的 Column 在**内容末尾**加的尾部 Spacer
+ * - [rememberBottomBarContentPadding]：`LazyColumn` 的 `contentPadding` 底部值
+ */
+
+/** `verticalScroll` 屏用：在内容末尾放一个为底栏预留的尾部 Spacer */
+@Composable
+fun BottomBarTrailingSpacer(modifier: Modifier = Modifier) {
+    Spacer(modifier.height(rememberBottomBarReservedHeight()))
+}
+
+/** `LazyColumn` 屏用：`contentPadding` 的底部值（顶部间距由各屏自行拼接） */
+@Composable
+fun rememberBottomBarContentPadding(): PaddingValues =
+    PaddingValues(bottom = rememberBottomBarReservedHeight())
 
 /* ------------------------------------------------------------------ 材质层 */
 
