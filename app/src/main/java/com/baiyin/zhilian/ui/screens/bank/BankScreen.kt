@@ -2,7 +2,6 @@ package com.baiyin.zhilian.ui.screens.bank
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,8 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -78,12 +77,13 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
         if (ready) {
             if (categories.isNotEmpty()) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = ZhilianSpacing.sm)) {
-                    // 分类 chips 横向滚动：原先 take(4) 会让第 5 个分类既看不到也选不了
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    // 分类 chips 横向滚动：原先 take(4) 会让第 5 个分类既看不到也选不了。
+                    // 用 LazyRow 而非「Row + horizontalScroll」：只组合可见的 chip，分类多时不白建节点
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
                     ) {
-                        categories.forEach { category ->
+                        items(categories) { category ->
                             FilterChip(
                                 selected = category in selectedCategories,
                                 onClick = {
