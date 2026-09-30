@@ -30,6 +30,14 @@ data class StemOwnerRow(
     @ColumnInfo(name = "stem") val stem: String,
 )
 
+/**
+ * 弱项分类聚合投影（统计页弱项卡）：当前错题（CONTEXT.md「错题」）按分类计数。
+ */
+data class CategoryWrongRow(
+    @ColumnInfo(name = "category") val category: String,
+    @ColumnInfo(name = "wrong_count") val wrongCount: Int,
+)
+
 @Dao
 interface QuestionDao {
 
@@ -110,4 +118,8 @@ interface QuestionDao {
 
     @Query("SELECT AVG(score_rate) FROM answer_records")
     suspend fun averageScoreRate(): Double?
+
+    /** 弱项卡：当前错题按分类聚合（TOP N 与排序由调用方 SQL 给定，错题条件与 PracticeRepository 同源） */
+    @RawQuery
+    suspend fun wrongCategoryRows(query: SupportSQLiteQuery): List<CategoryWrongRow>
 }

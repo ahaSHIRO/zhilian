@@ -2,6 +2,7 @@ package com.baiyin.zhilian.data.practice
 
 import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
+import com.baiyin.zhilian.data.db.CategoryWrongRow
 import com.baiyin.zhilian.data.db.QuestionDao
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.db.QuestionTagRow
@@ -47,13 +48,19 @@ class PracticeRepository(
     private fun quote(values: Set<String>): String =
         values.joinToString(",") { "'" + it.replace("'", "''") + "'" }
 
+    /**
+     * 错题判定（CONTEXT.md「错题」：有错史且未被连续两次全对消解）。
+     * buildWhere 的 onlyWrong 与弱项统计共用此片段，勿两处漂移。
+     */
+    private val sqlWrong = "has_ever_wrong = 1 AND consecutive_perfect < 2"
+
     /** 拼装 WHERE 子句（受控常量）；选题与计数共用，避免两处条件漂移 */
     private fun buildWhere(filter: PracticeFilter): String = buildList {
         add("inactive = 0")
         if (filter.subjects.isNotEmpty()) add("subject IN (${quote(filter.subjects)})")
         if (filter.categories.isNotEmpty()) add("category IN (${quote(filter.categories)})")
         if (filter.types.isNotEmpty()) add("type IN (${quote(filter.types)})")
-        if (filter.onlyWrong) add("has_ever_wrong = 1 AND consecutive_perfect < 2")
+        if (filter.onlyWrong) add(sqlWrong)
         if (filter.onlyFavorite) add("favorite = 1")
     }.joinToString(" AND ")
 
@@ -200,4 +207,20 @@ class PracticeRepository(
     suspend fun overallAccuracy() = questionDao.overallAccuracy()
     suspend fun multipleChoicePerfectRate() = questionDao.multipleChoicePerfectRate()
     suspend fun averageScoreRate() = questionDao.averageScoreRate()
+
+    // 统计（弱项卡：错题数 + 弱项分类 TOP3；错题条件与 buildWhere.onlyWrong 同源）
+
+    /** 当前错题总数（CONTEXT.md「错题」） */
+    suspend fun wrongQuestionCount(): Int =
+        questionDao.countRaw(SimpleSQLiteQuery(
+            "SELECT COUNT(*) FROM questions WHERE inactive = 0 AND $sqlWrong"
+        ))
+
+    /** 弱项分类 TOP [limit]：当前错题按分类计数，降序取前若干（并列按分类名稳定排序） */
+    suspend fun topWrongCategories(limit: Int = 3): List<CategoryWrongRow> =
+        questionDao.wrongCategoryRows(SimpleSQLiteQuery(
+            "SELECT category, COUNT(*) AS wrong_count FROM questions " +
+                "WHERE inactive = 0 AND $sqlWrong " +
+                "GROUP BY category ORDER BY wrong_count DESC, category LIMIT $limit"
+        ))
 }

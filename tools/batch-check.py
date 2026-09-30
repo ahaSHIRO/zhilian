@@ -6,9 +6,11 @@
 整批被拒"从而走一整套回炉流程。App 对 Schema 不合格的批次是整批拒绝且只回报
 前 5 条错误。
 
-校验分两层：
+校验分三层：
   1. JSON Schema（复用 App 打包的同一份权威 Schema：docs/schema/batch-v1.schema.json）
   2. 应用级规则（Schema 表达不了、由 App 逐题执行的 8 项，见 batch-spec-v1.md）
+  3. 标签封闭词表（question-authoring.md §八，出题规范约束，PC 侧专属——App 不校验标签；
+     词表由 tools/vocab.py 从规范文档实时解析，文档登记即生效）
 
 用法：
     python tools/batch-check.py <批次文件路径> [--batches-dir <已导入批次目录>]
@@ -23,6 +25,9 @@ import json
 import os
 import sys
 import unicodedata
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from vocab import FROZEN_TAGS, load_vocabulary  # noqa: E402
 
 try:
     import jsonschema
@@ -209,6 +214,39 @@ def validate_against_existing(batch, existing):
                      RULE_SUSPECTED_DUPLICATE)
 
 
+def validate_vocabulary(batch):
+    """标签封闭词表核对（question-authoring.md §八，第三层）。
+
+    PC 侧专属约束，App 不校验标签——因此只挂主校验路径、不进 --selftest 夹具
+    （夹具钉的是 Schema + 8 项应用级规则的跨端一致性，掺入词表会破坏与
+    Kotlin 端 AppLevelFixturesTest 的规则集合比对）。
+
+    词表按 subject 取并集：跨分类复用合法（既有先例 suspending-functions、operators），
+    节内按分类分表只是登记位置，不是校验边界。冻结标签（basics）对任何新批次报错。
+    """
+    subject = batch.get("subject")
+    legal = load_vocabulary().get(subject)
+    questions = batch.get("questions") or []
+    if legal is None:
+        # arkts 等未建档科目：携带标签即越表（§八：首个批次出题时先提议扩表建档）
+        for idx, q in enumerate(questions):
+            tags = q.get("tags") or []
+            if tags:
+                err(f"[词表] 科目 {subject!r} 词表未建档，"
+                    f"题 {q.get('questionId', f'#{idx}')} 不得携带标签 {sorted(tags)}——"
+                    f"先按 §八 增量规则提议扩表", RULE_EXTRA)
+        return
+    for idx, q in enumerate(questions):
+        qid = q.get("questionId", f"#{idx}")
+        for t in q.get("tags") or []:
+            if t in FROZEN_TAGS:
+                err(f"[词表] 题 {qid} 使用冻结标签 {t!r}（语义过泛已冻结，"
+                    f"存量保留、新题禁用，见 §八）", RULE_EXTRA)
+            elif t not in legal:
+                err(f"[词表] 题 {qid} 标签 {t!r} 不在 {subject} 词表（§八）——"
+                    f"先核对词形（禁单复数/去连字符等变体），确属缺词走提议→扩表", RULE_EXTRA)
+
+
 def run_selftest():
     """用共同夹具自检本脚本的规则判定（与 Kotlin 端 AppLevelFixturesTest 同一组用例）。
 
@@ -281,6 +319,7 @@ def main():
 
     schema_ok = validate_schema(batch, schema)
     validate_app_level(batch)
+    validate_vocabulary(batch)
 
     # 与已有批次核对（仅当目录存在）
     batches_dir = args.batches_dir

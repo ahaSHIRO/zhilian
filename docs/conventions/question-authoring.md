@@ -144,6 +144,8 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 **排除"名词背诵型"**：不考"协程的三大特性是什么"、"`CoroutineStart` 有几个枚举值"这类纯记忆题——刷完记不住也用不上。
 
+**难度梯度（软约束，不进 batch-check）**：受众含新手同学（ADR-0011），每批宜含 2–3 道**入门题**——定义正反、基础 API 语义等新手可答对的题，为批内铺难度坡度；程序脑内执行题宜避免连续超过 2 道。本条仅"宜"，由验收时维护者体感把关；难度不建模为 Schema 字段（取舍见 ADR-0011）。
+
 ### 格式配比（题型分布）
 
 单选约 45%、判断约 25%、多选约 20%、填空约 10%。单选与判断歧义少、易把关；多选与填空歧义多，控制比例。
@@ -264,7 +266,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 ## 八、标签词表
 
-标签是练习配置页**最细的筛选维度**（App 中标签行跟随已选分类收窄），词表失控会让筛选直接退化。治理为**存量定死 + 增量扩表**的封闭词表。
+标签是练习配置页**最细的筛选维度**（App 中标签行跟随已选分类收窄），词表失控会让筛选直接退化。治理为**存量定死 + 增量扩表**的封闭词表。词表外标签与冻结标签在新批次中由 `tools/batch-check.py` 机械拦截（词表自本文档 §八 实时解析，此处登记即生效）。
 
 ### 增量规则（出题代理逐条遵守）
 
@@ -274,7 +276,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 4. 词表缺词：向维护者提议（标签 + 理由 + 拟归属分类），扩表后方可使用
 5. 新标签进入词表时同步登记到下表对应分类
 
-### Kotlin（存量 v2，2026-09-28 自 4 个批次整理；v2 新增通道／数据流／共享状态／测试与调试四类及其标签）
+### Kotlin（存量 v3，2026-09-30 追认 batch-0006 在用的七个数据流标签并移除零使用的 channel-flow；v2 2026-09-28 自 4 个批次整理，新增通道／数据流／共享状态／测试与调试四类及其标签）
 
 | 分类 | 合法标签 |
 |---|---|
@@ -285,7 +287,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 协程基础 | async、awaitall、cancellation、concurrency、coroutines、coroutinescope、exception-handler、global-scope、launch、runblocking、select、structured-concurrency、supervisorscope、withtimeout |
 | 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、unconfined、undispatched、withcontext |
 | 通道 | channel、capacity、collect、exception |
-| 数据流 | flow、state-flow、shared-flow、replay、channel-flow、flowon、collect、exception、capacity |
+| 数据流 | flow、state-flow、shared-flow、replay、flowon、collect、exception、capacity、flow-operators、zip、combine、flatmap、transform、operator-fusion、buffer |
 | 共享状态 | mutex、synchronized |
 | 测试&调试 | runtest、virtual-time、debug-agent、coroutine-name |
 

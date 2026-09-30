@@ -100,6 +100,8 @@
     <string name="stats_overall_accuracy">全部作答正确率</string>
     <string name="stats_multi_perfect">多选全对率</string>
     <string name="stats_avg_score">平均得分率</string>
+    <string name="stats_wrong_count">当前错题</string>
+    <string name="stats_no_wrong">暂无错题</string>
 
     <!-- 批次管理 -->
     <string name="batch_pick_dir">选择批次目录</string>

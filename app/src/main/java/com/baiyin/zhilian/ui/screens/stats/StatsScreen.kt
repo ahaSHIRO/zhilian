@@ -27,9 +27,11 @@ import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
+import com.baiyin.zhilian.data.db.CategoryWrongRow
 
 /**
  * 统计页（ADR-0002）：数字卡片 + 进度条呈现 README 四项指标；不引入图表库。
+ * 2026-09-30 增设弱项卡：当前错题数 + 弱项分类 TOP3，指向"哪里弱练哪里"。
  */
 @Composable
 fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
@@ -38,6 +40,8 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
     var multiPerfect by remember { mutableStateOf<Double?>(null) }
     var avgScore by remember { mutableStateOf<Double?>(null) }
     var questionCount by remember { mutableStateOf(0) }
+    var wrongCount by remember { mutableStateOf(0) }
+    var topWrong by remember { mutableStateOf<List<CategoryWrongRow>>(emptyList()) }
     var recordCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -45,6 +49,8 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
         overall = container.practiceRepository.overallAccuracy()
         multiPerfect = container.practiceRepository.multipleChoicePerfectRate()
         avgScore = container.practiceRepository.averageScoreRate()
+        wrongCount = container.practiceRepository.wrongQuestionCount()
+        topWrong = container.practiceRepository.topWrongCategories()
         container.questionBank.observeCount().collect { questionCount = it }
     }
     LaunchedEffect(Unit) {
@@ -92,12 +98,24 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
             value = percent(avgScore),
             progress = avgScore,
         )
+        StatCard(
+            label = stringResource(R.string.stats_wrong_count),
+            value = wrongCount.toString(),
+            detail = topWrong.joinToString(" · ") { "${it.category} ${it.wrongCount}" }
+                .ifEmpty { stringResource(R.string.stats_no_wrong) },
+        )
         Spacer(modifier = Modifier.height(bottomBarPadding))
     }
 }
 
 @Composable
-private fun StatCard(label: String, value: String, progress: Double? = null, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    value: String,
+    progress: Double? = null,
+    detail: String? = null,
+    modifier: Modifier = Modifier,
+) {
     ZhilianCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(ZhilianSpacing.cardInner), verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -107,6 +125,9 @@ private fun StatCard(label: String, value: String, progress: Double? = null, mod
                     progress = { it.toFloat() },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            detail?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
