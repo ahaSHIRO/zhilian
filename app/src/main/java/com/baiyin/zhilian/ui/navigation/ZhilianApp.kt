@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,7 +32,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.data.BottomBarStyle
-import com.baiyin.zhilian.data.practice.ProcessToken
 import com.baiyin.zhilian.data.practice.SessionArgs
 import com.baiyin.zhilian.ui.components.ZhilianBottomBar
 import com.baiyin.zhilian.ui.components.resolveBottomBarStyle
@@ -46,13 +46,6 @@ import com.baiyin.zhilian.ui.theme.drawZhilianFog
 import com.baiyin.zhilian.ui.theme.zhilianBaseColor
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-
-/** 子页面路由（不在底部导航显示） */
-const val ROUTE_PRACTICE_SESSION = "practice_session"
-const val ROUTE_BATCHES = "batches"
-
-/** 会话参数在发起页 savedStateHandle 中的键（载荷见 [SessionArgs]） */
-private const val KEY_SESSION_ARGS = "sessionArgs"
 
 /** tab 序号；非 tab 路由（会话页、批次管理页）返回 null */
 private fun tabIndex(route: String?): Int? =
@@ -133,6 +126,23 @@ fun ZhilianApp(
         .firstOrNull { top -> currentDestination?.hierarchy?.any { it.route == top.route } == true }
         ?.route
 
+    // 导航意图模块（C2/C9）：四个入口共用「一次意图至多一次导航」的来源页守卫。
+    // 依赖全部惰性读取 navController，故 remember(navController) 不会因重组而拿到旧闭包。
+    val navigation = remember(navController) {
+        PracticeNavigation(
+            currentRoute = { navController.currentDestination?.route },
+            navigateTo = { route -> navController.navigate(route) },
+            popBack = { navController.popBackStack() },
+            writeSessionArgs = { args ->
+                navController.currentBackStackEntry?.savedStateHandle?.set(KEY_SESSION_ARGS, args)
+            },
+            clearSessionArgs = {
+                navController.previousBackStackEntry
+                    ?.savedStateHandle?.remove<SessionArgs>(KEY_SESSION_ARGS)
+            },
+        )
+    }
+
     val style by container.settingsRepository.bottomBarStyle
         .collectAsStateWithLifecycle(initialValue = BottomBarStyle.LIQUID_GLASS)
     // 低版本设备静默退到磨砂：纯函数解析，便于单测（ADR-0010）
@@ -174,14 +184,7 @@ fun ZhilianApp(
                     PracticeHomeScreen(
                         container = container,
                         onStartPractice = { questionIds, shuffleOptions ->
-                            // 单一载荷写入发起页 savedStateHandle，会话页经
-                            // previousBackStackEntry 读取（官方「向上一页回传」模式）；
-                            // 顺带记下写入时的进程令牌，供重建时区分「配置变更」与「进程终止」
-                            navController.currentBackStackEntry?.savedStateHandle?.set(
-                                KEY_SESSION_ARGS,
-                                SessionArgs(questionIds, shuffleOptions, ProcessToken.value),
-                            )
-                            navController.navigate(ROUTE_PRACTICE_SESSION)
+                            navigation.startPractice(questionIds, shuffleOptions)
                         },
                     )
                 }
@@ -194,7 +197,7 @@ fun ZhilianApp(
                 tabDestination(TopLevelDestination.SETTINGS.route) {
                     SettingsScreen(
                         container = container,
-                        onOpenBatches = { navController.navigate(ROUTE_BATCHES) },
+                        onOpenBatches = { navigation.openBatches() },
                     )
                 }
                 composable(ROUTE_PRACTICE_SESSION) {
@@ -204,19 +207,13 @@ fun ZhilianApp(
                     PracticeSessionScreen(
                         container = container,
                         args = args,
-                        onExit = {
-                            // navigation 不清理 savedStateHandle（2.10.2 全量源码零引用），
-                            // 弹出前清掉参数，避免上一次的选择残留在栈里被下次读到
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle?.remove<SessionArgs>(KEY_SESSION_ARGS)
-                            navController.popBackStack()
-                        },
+                        onExit = { navigation.exitSession() },
                     )
                 }
                 composable(ROUTE_BATCHES) {
                     BatchManageScreen(
                         container = container,
-                        onBack = { navController.popBackStack() },
+                        onBack = { navigation.closeBatches() },
                     )
                 }
             }

@@ -10,3 +10,4 @@
 /app/build
 /.trae
 /.commandcode
+__pycache__/

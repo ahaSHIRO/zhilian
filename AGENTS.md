@@ -46,6 +46,7 @@ python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检
 4. **构建成功 ≠ 验证通过**：真机验证前先 `adb install -r` 新 APK。
 5. **工具回执可能污染**：投放/删除等不可逆操作分步重验（存在性 → 列目录 → 双 hash 交叉核对），见 pitfalls 3.2。
 6. **改动/审查/答疑前优先主动读当前磁盘文件**，不凭记忆或旧快照下结论。
+7. **多会话并行时先隔离再动手**：同一个工作目录里的多个会话共享磁盘文件与 **git index**——一方暂存后，另一方跑一次不带路径的 `git commit` 就会把暂存卷走。① 提交一律用 `git commit --only -- <明确路径>`（对别人暂存了什么免疫），提交前核对 `git diff --cached --name-only`；② 若两个任务会改同一批文件（`strings.xml` / `CONTEXT.md` / `ZhilianApp.kt` 这类几乎必然撞），先 `git worktree add ../知练-<任务> -b <分支>` 给任务开独立目录——**同目录切分支不隔离任何东西，还会毁掉对方的未提交改动**；③ 合回 main 由人执行，AI 不自行 merge/push。
 
 ## 出题代理专用
 
