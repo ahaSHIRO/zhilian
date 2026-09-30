@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -62,11 +63,11 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = ZhilianSpacing.screenEdge)) {
         if (categories.isNotEmpty()) {
-            Row(
+            LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(vertical = ZhilianSpacing.sm),
                 horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
             ) {
-                categories.take(4).forEach { category ->
+                items(categories) { category ->
                     FilterChip(
                         selected = category in selectedCategories,
                         onClick = {
