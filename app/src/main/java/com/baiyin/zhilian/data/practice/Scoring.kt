@@ -3,8 +3,8 @@ package com.baiyin.zhilian.data.practice
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.db.AnswerRecordEntity
 import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.question.QuestionContent
 import kotlinx.serialization.encodeToString
-import java.text.Normalizer
 
 /** 用户作答（会话内存态） */
 sealed class UserAnswer {
@@ -14,7 +14,12 @@ sealed class UserAnswer {
     data class Blank(val text: String) : UserAnswer()
 }
 
-/** 练习判定（README 评分规则）。返回 null 表示尚未作答。 */
+/**
+ * 练习判定（README 评分规则）。
+ *
+ * 答案的题型化解码一律走 [QuestionContent]：四种题型的分派只写一次，
+ * 判分、练习卡与题库预览共用同一份读取，不会各判各的。
+ */
 object Scoring {
 
     /**
@@ -23,12 +28,9 @@ object Scoring {
      * 两侧同形归一，避免视觉相同但分解形式不同的字符被误判为错。
      */
     fun isBlankMatch(input: String, acceptable: List<String>): Boolean {
-        val normalized = normalizeBlank(input)
-        return acceptable.any { normalizeBlank(it) == normalized }
+        val normalized = QuestionContent.normalizeIdentity(input)
+        return acceptable.any { QuestionContent.normalizeIdentity(it) == normalized }
     }
-
-    /** 填空匹配归一化：NFC + trim（与 BatchImportService.normalizeIdentity 同规则） */
-    fun normalizeBlank(s: String): String = Normalizer.normalize(s.trim(), Normalizer.Form.NFC)
 
     /**
      * 判定得分。多选：max(0, 正确选中数 − 错误选中数) / 正确选项总数，满分才算答对。
@@ -37,11 +39,11 @@ object Scoring {
     fun score(question: QuestionEntity, answer: UserAnswer): Pair<Double, Boolean> {
         return when (answer) {
             is UserAnswer.Single -> {
-                val correct = answer.optionId == JsonPrimitiveAnswer.single(question.answerJson)
+                val correct = answer.optionId == QuestionContent.singleAnswer(question.answerJson)
                 if (correct) 1.0 to true else 0.0 to false
             }
             is UserAnswer.Multiple -> {
-                val correctSet = JsonPrimitiveAnswer.multiple(question.answerJson).toSet()
+                val correctSet = QuestionContent.multipleAnswers(question.answerJson).toSet()
                 val hits = answer.optionIds.count { it in correctSet }
                 val misses = answer.optionIds.count { it !in correctSet }
                 val rate = if (correctSet.isEmpty()) 0.0 else (hits - misses).coerceAtLeast(0) / correctSet.size.toDouble()
@@ -49,12 +51,11 @@ object Scoring {
                 rate to perfect
             }
             is UserAnswer.TrueFalse -> {
-                val correct = answer.value == JsonPrimitiveAnswer.boolean(question.answerJson)
+                val correct = answer.value == QuestionContent.trueFalseAnswer(question.answerJson)
                 if (correct) 1.0 to true else 0.0 to false
             }
             is UserAnswer.Blank -> {
-                val acceptable = JsonPrimitiveAnswer.blankAcceptable(question.answerJson)
-                val correct = isBlankMatch(answer.text, acceptable)
+                val correct = isBlankMatch(answer.text, QuestionContent.blankAcceptables(question.answerJson))
                 if (correct) 1.0 to true else 0.0 to false
             }
         }
@@ -67,7 +68,7 @@ object Scoring {
         else -> AnswerOutcome.Partial // 0 < rate < 1，部分得分仍算未对
     }
 
-    /** 构造作答记录实体（isFirst 由调用方查询后传入） */
+    /** 构造作答记录实体（isFirst 由调用方查询后传入，answeredAt 由事务边界传入） */
     fun toRecord(
         question: QuestionEntity,
         answer: UserAnswer,
@@ -90,18 +91,5 @@ object Scoring {
         is UserAnswer.Multiple -> BatchJson.json.encodeToString(answer.optionIds.sorted())
         is UserAnswer.TrueFalse -> BatchJson.json.encodeToString(answer.value)
         is UserAnswer.Blank -> BatchJson.json.encodeToString(answer.text)
-    }
-
-    /** answerJson 的题型化读取工具 */
-    private object JsonPrimitiveAnswer {
-        private val json = BatchJson.json
-
-        fun single(answerJson: String): String = json.decodeFromString<String>(answerJson)
-
-        fun multiple(answerJson: String): List<String> = json.decodeFromString<List<String>>(answerJson)
-
-        fun boolean(answerJson: String): Boolean = json.decodeFromString<Boolean>(answerJson)
-
-        fun blankAcceptable(answerJson: String): List<String> = json.decodeFromString<List<String>>(answerJson)
     }
 }

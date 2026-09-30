@@ -12,6 +12,7 @@
 .\gradlew.bat assembleDebug          # 构建
 .\gradlew.bat test                   # 单测
 python tools\batch-check.py <批次.json>   # 批次 JSON 预校验
+python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检（与 App 端同夹具）
 ```
 
 ## 目录地图

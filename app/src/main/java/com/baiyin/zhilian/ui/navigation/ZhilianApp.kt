@@ -71,10 +71,24 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabSlideExit(): Ex
         fadeOut(tween(300))
 }
 
+/** 二级页 push 进入：从右全屏滑入；下层页静止不动（无淡入淡出、无视差缩放） */
+private fun secondaryEnter(): EnterTransition =
+    slideInHorizontally(tween(NAV_SLIDE_DURATION)) { it }
+
+private fun secondaryExit(): ExitTransition = ExitTransition.None
+
+private fun secondaryPopEnter(): EnterTransition = EnterTransition.None
+
+/** 二级页 pop 退出：全屏向右滑出（经典水平滑动，非跟手；预测性返回已停用，见 ADR-0009） */
+private fun secondaryPopExit(): ExitTransition =
+    slideOutHorizontally(tween(NAV_SLIDE_DURATION)) { it }
+
+private const val NAV_SLIDE_DURATION = 300
+
 /**
  * 底部导航四个 tab 的 composable 注册：挂方向感知横滑。
- * 转场 lambda 返回 null 表示回落到 NavHost 默认（淡入淡出），故会话页等
- * 非 tab 路由参与导航时两侧都走默认转场，不受横滑影响。
+ * 转场 lambda 返回 null 表示回落到 NavHost 默认（二级页经典水平侧滑，下层静止），故会话页等
+ * 非 tab 路由参与导航时走侧滑，tab 间切换则用方向感知横滑。
  */
 private fun NavGraphBuilder.tabDestination(
     route: String,
@@ -144,6 +158,12 @@ fun ZhilianApp(
                     .layerBackdrop(backdrop)
                     // 只避让状态栏：底部留给内容穿透底栏
                     .padding(top = innerPadding.calculateTopPadding()),
+                // 二级页默认转场：经典水平侧滑（下层静止，无淡入淡出）；tab 间切换由 tabDestination 覆盖。
+                // 不含 predictivePop*——预测性返回已在 Manifest 停用（ADR-0009）。
+                enterTransition = { secondaryEnter() },
+                exitTransition = { secondaryExit() },
+                popEnterTransition = { secondaryPopEnter() },
+                popExitTransition = { secondaryPopExit() },
             ) {
                 tabDestination(TopLevelDestination.PRACTICE.route) {
                     PracticeHomeScreen(

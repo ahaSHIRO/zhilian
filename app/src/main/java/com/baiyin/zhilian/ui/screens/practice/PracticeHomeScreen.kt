@@ -30,19 +30,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
-import com.baiyin.zhilian.data.practice.PracticeFilter
+import com.baiyin.zhilian.data.practice.PracticeSelection
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -50,29 +49,57 @@ import kotlinx.coroutines.launch
 private const val LIMIT_MIN = 10
 private const val LIMIT_MAX = 100
 private const val LIMIT_STEP = 5
-private const val LIMIT_DEFAULT = 20
 
 /**
  * 筛选选择的"应用内保留"：切 tab、进会话返回都不丢，跨进程（杀 App 重开）仍重置。
  * 后者是用户明确要的行为（随手刷/专攻错题/挑专题/顺序推四场景都存在，
  * 跨进程记住选择会"帮你回忆现在不想要的东西"），故只到 Saveable 这一层为止。
+ *
+ * 整个选择作为一个整体存取：级联收窄会同时改动多层（科目变→分类变→标签变），
+ * 拆成多个 Saveable 反而容易存下互相矛盾的中途态。
  */
-private val StringSetSaver = Saver<Set<String>, List<String>>(
-    save = { it.toList() },
-    restore = { it.toSet() },
+private const val SAVE_SEP = "\u0001"
+
+private val PracticeSelectionSaver = listSaver<PracticeSelection, String>(
+    save = {
+        listOf(
+            it.subjects.joinToString(SAVE_SEP),
+            it.categories.joinToString(SAVE_SEP),
+            it.tags.joinToString(SAVE_SEP),
+            it.types.joinToString(SAVE_SEP),
+            it.onlyWrong.toString(),
+            it.onlyFavorite.toString(),
+            it.sequential.toString(),
+            it.limit.toString(),
+        )
+    },
+    restore = { parts ->
+        fun setAt(index: Int): Set<String> =
+            parts[index].split(SAVE_SEP).filter { it.isNotEmpty() }.toSet()
+        PracticeSelection(
+            subjects = setAt(0),
+            categories = setAt(1),
+            tags = setAt(2),
+            types = setAt(3),
+            onlyWrong = parts[4].toBoolean(),
+            onlyFavorite = parts[5].toBoolean(),
+            sequential = parts[6].toBoolean(),
+            limit = parts[7].toInt(),
+        )
+    },
 )
+
+/** 多选 chip 的开关语义：已选则去掉，未选则加入 */
+private fun Set<String>.toggled(value: String): Set<String> =
+    if (value in this) this - value else this + value
 
 /**
  * 练习配置页：筛选条件卡（科目 + 分类 + 标签 + 题型 + 范围 + 匹配数尾行）
  * + 会话设置卡（顺序/随机 + 选项打乱开关 + 题量 + 开始练习），两卡语义分组。
  * 条件组合按 README 必须全部满足；题量不足时以现有题开练，不重复补足。
  *
- * 分类与标签都挂在科目下：选中科目后，chips 只显示该科目下的取值，
- * 避免 Java 与 Kotlin 的同名分类混在一起（CONTEXT.md 的科目/分类身份规范）。
- * 科目与分类均为空时表示不限，各维度可任意组合；同一维度内多选取并集。
- *
- * 标签再跟随已选分类收窄：标签基数远高于分类（18 道题已有 20+ 个），
- * 全量平铺会把配置页撑成两屏，故先选分类再按标签细筛。
+ * 选择态与级联规则见 [PracticeSelection]：分类挂在科目下、标签挂在分类下，
+ * 上层变化后下层收窄——规则在纯模块里，本页只负责把事件转发过去并渲染。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,28 +108,23 @@ fun PracticeHomeScreen(
     onStartPractice: (List<String>, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 用户手选的筛选状态走 Saveable（应用内保留，见 StringSetSaver 注释）；
-    // 列表与计数是 DB 派生值，回来时 LaunchedEffect 会重算，不值得存
-    var subjects by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedSubjects by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
-    var categories by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedCategories by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
-    var tags by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedTags by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
-    var types by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedTypes by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf<Set<String>>(emptySet()) }
-    var onlyWrong by rememberSaveable { mutableStateOf(false) }
-    var onlyFavorite by rememberSaveable { mutableStateOf(false) }
-    var sequential by rememberSaveable { mutableStateOf(true) }
+    var selection by rememberSaveable(stateSaver = PracticeSelectionSaver) {
+        mutableStateOf(PracticeSelection())
+    }
+    // 选项打乱与题量草稿是 UI 瞬时态，不属于「练什么」的筛选条件
     var shuffleOptions by rememberSaveable { mutableStateOf(true) }
-    var limit by rememberSaveable { mutableStateOf(LIMIT_DEFAULT) }
-    // 题量面板：草稿值在滑块里调，确定才写回 limit；面板开着时实时预览草稿值的匹配数
     var showLimitSheet by rememberSaveable { mutableStateOf(false) }
-    var limitDraft by rememberSaveable { mutableStateOf(LIMIT_DEFAULT) }
-    var draftMatchedCount by remember { mutableStateOf(0) }
+    var limitDraft by rememberSaveable { mutableStateOf(PracticeSelection.DEFAULT_LIMIT) }
+
+    // 可选值列表与计数都是 DB 派生值，回来时由 LaunchedEffect 重算，不值得存
+    var subjects by remember { mutableStateOf<List<String>>(emptyList()) }
+    var categories by remember { mutableStateOf<List<String>>(emptyList()) }
+    var tags by remember { mutableStateOf<List<String>>(emptyList()) }
+    var types by remember { mutableStateOf<List<String>>(emptyList()) }
     var matchedCount by remember { mutableStateOf(0) }
     var wrongCount by remember { mutableStateOf(0) }
     var favoriteCount by remember { mutableStateOf(0) }
+    var draftMatchedCount by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     // 科目与题型列表只随题库变化，取一次即可
@@ -111,40 +133,30 @@ fun PracticeHomeScreen(
         types = container.practiceRepository.distinctTypes()
     }
 
-    // 分类跟随所选科目：单选科目时显示该科目的分类；未选或多选时显示全部（多选场景下并集更实用）
-    LaunchedEffect(selectedSubjects) {
-        val only = selectedSubjects.singleOrNull()
-        categories = container.practiceRepository.distinctCategories(only)
-        // 科目变化后，已选分类若不在新列表里则清掉，避免出现选中了但看不到的 chip
-        selectedCategories = selectedCategories.intersect(categories.toSet())
+    // 分类跟随所选科目：单选科目时显示该科目的分类；未选或多选时显示全部（多选场景下并集更实用）。
+    // 科目变化后收窄已有选择，避免出现选中了但看不到的 chip。
+    LaunchedEffect(selection.subjects) {
+        val available = container.practiceRepository.distinctCategories(selection.onlySubject)
+        categories = available
+        selection = selection.withCategories(available)
     }
 
-    // 标签跟随已选分类收窄：全库标签基数远高于分类，不收窄会把配置页撑成两屏。
-    // 未选分类时不给出标签，改用一行提示说明它在哪儿出现。
-    LaunchedEffect(selectedSubjects, selectedCategories) {
-        tags = if (selectedCategories.isEmpty()) emptyList()
-        else container.practiceRepository.distinctTags(
-            selectedSubjects.singleOrNull(), selectedCategories
-        )
+    // 标签跟随已选分类收窄：未选分类时不给出标签，改用一行提示说明它在哪儿出现。
+    LaunchedEffect(selection.subjects, selection.categories) {
+        val fetched = if (selection.categories.isEmpty()) {
+            emptyList()
+        } else {
+            container.practiceRepository.distinctTags(selection.onlySubject, selection.categories)
+        }
+        tags = fetched
         // 分类变窄后，已选标签若不在新列表里则清掉，避免留下看不见也关不掉的暗筛选
-        selectedTags = selectedTags.intersect(tags.toSet())
+        selection = selection.withTags(fetched)
     }
-
-    fun currentFilter() = PracticeFilter(
-        subjects = selectedSubjects,
-        categories = selectedCategories,
-        types = selectedTypes,
-        tags = selectedTags,
-        onlyWrong = onlyWrong,
-        onlyFavorite = onlyFavorite,
-        sequential = sequential,
-        limit = limit,
-    )
 
     // 实时预览：总数走计数接口（不受题量上限截断）；错题/收藏额外给出只打开该范围的预判数，
-    // 让两个范围开关在勾选前就能判断这次值不值得刷。顺序/随机与计数无关故不列入 key。
-    LaunchedEffect(selectedSubjects, selectedCategories, selectedTags, selectedTypes, onlyWrong, onlyFavorite, limit) {
-        val filter = currentFilter()
+    // 让两个范围开关在勾选前就能判断这次值不值得刷。顺序/随机与计数无关故不参与。
+    LaunchedEffect(selection) {
+        val filter = selection.toFilter()
         matchedCount = container.practiceRepository.countMatching(filter)
         wrongCount = container.practiceRepository.wrongCount(filter)
         favoriteCount = container.practiceRepository.favoriteCount(filter)
@@ -173,13 +185,9 @@ fun PracticeHomeScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                         subjects.forEach { subject ->
                             FilterChip(
-                                selected = subject in selectedSubjects,
+                                selected = subject in selection.subjects,
                                 onClick = {
-                                    selectedSubjects = if (subject in selectedSubjects) {
-                                        selectedSubjects - subject
-                                    } else {
-                                        selectedSubjects + subject
-                                    }
+                                    selection = selection.copy(subjects = selection.subjects.toggled(subject))
                                 },
                                 label = { Text(subjectLabel(subject)) },
                             )
@@ -201,13 +209,11 @@ fun PracticeHomeScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                             rowCategories.forEach { category ->
                                 FilterChip(
-                                    selected = category in selectedCategories,
+                                    selected = category in selection.categories,
                                     onClick = {
-                                        selectedCategories = if (category in selectedCategories) {
-                                            selectedCategories - category
-                                        } else {
-                                            selectedCategories + category
-                                        }
+                                        selection = selection.copy(
+                                            categories = selection.categories.toggled(category),
+                                        )
                                     },
                                     label = { Text(category) },
                                 )
@@ -217,7 +223,7 @@ fun PracticeHomeScreen(
                 }
 
                 // ---- 标签（跟随已选分类；比分类更细，承担挑专题刷的需求）----
-                if (selectedCategories.isEmpty()) {
+                if (selection.categories.isEmpty()) {
                     Text(
                         stringResource(R.string.practice_tag_hint),
                         style = MaterialTheme.typography.bodyMedium,
@@ -229,13 +235,9 @@ fun PracticeHomeScreen(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                         tags.forEach { tag ->
                             FilterChip(
-                                selected = tag in selectedTags,
+                                selected = tag in selection.tags,
                                 onClick = {
-                                    selectedTags = if (tag in selectedTags) {
-                                        selectedTags - tag
-                                    } else {
-                                        selectedTags + tag
-                                    }
+                                    selection = selection.copy(tags = selection.tags.toggled(tag))
                                 },
                                 label = { Text(tag) },
                             )
@@ -250,13 +252,9 @@ fun PracticeHomeScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                             rowTypes.forEach { type ->
                                 FilterChip(
-                                    selected = type in selectedTypes,
+                                    selected = type in selection.types,
                                     onClick = {
-                                        selectedTypes = if (type in selectedTypes) {
-                                            selectedTypes - type
-                                        } else {
-                                            selectedTypes + type
-                                        }
+                                        selection = selection.copy(types = selection.types.toggled(type))
                                     },
                                     label = { Text(typeLabel(type)) },
                                 )
@@ -269,13 +267,13 @@ fun PracticeHomeScreen(
                 SectionLabel(stringResource(R.string.practice_filter_scope))
                 Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                     FilterChip(
-                        selected = onlyWrong,
-                        onClick = { onlyWrong = !onlyWrong },
+                        selected = selection.onlyWrong,
+                        onClick = { selection = selection.copy(onlyWrong = !selection.onlyWrong) },
                         label = { Text(stringResource(R.string.practice_scope_wrong_count, wrongCount)) },
                     )
                     FilterChip(
-                        selected = onlyFavorite,
-                        onClick = { onlyFavorite = !onlyFavorite },
+                        selected = selection.onlyFavorite,
+                        onClick = { selection = selection.copy(onlyFavorite = !selection.onlyFavorite) },
                         label = { Text(stringResource(R.string.practice_scope_favorite_count, favoriteCount)) },
                     )
                 }
@@ -301,13 +299,13 @@ fun PracticeHomeScreen(
                 SectionLabel(stringResource(R.string.practice_filter_order))
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     SegmentedButton(
-                        selected = sequential,
-                        onClick = { sequential = true },
+                        selected = selection.sequential,
+                        onClick = { selection = selection.copy(sequential = true) },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                     ) { Text(stringResource(R.string.practice_order_sequential)) }
                     SegmentedButton(
-                        selected = !sequential,
-                        onClick = { sequential = false },
+                        selected = !selection.sequential,
+                        onClick = { selection = selection.copy(sequential = false) },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                     ) { Text(stringResource(R.string.practice_order_random)) }
                 }
@@ -332,18 +330,18 @@ fun PracticeHomeScreen(
                 SectionLabel(stringResource(R.string.practice_filter_limit))
                 OutlinedButton(
                     onClick = {
-                        limitDraft = limit
+                        limitDraft = selection.limit
                         showLimitSheet = true
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.practice_limit_value, limit))
+                    Text(stringResource(R.string.practice_limit_value, selection.limit))
                 }
 
                 Button(
                     onClick = {
                         scope.launch {
-                            val questions = container.practiceRepository.pickQuestions(currentFilter())
+                            val questions = container.practiceRepository.pickQuestions(selection.toFilter())
                             if (questions.isNotEmpty()) {
                                 onStartPractice(questions.map { it.questionId }, shuffleOptions)
                             }
@@ -363,7 +361,7 @@ fun PracticeHomeScreen(
     // 题量半模态面板：草稿值随滑块走，确定才写回；与解析面板同一交互语言（ADR-0007）
     if (showLimitSheet) {
         LaunchedEffect(limitDraft) {
-            draftMatchedCount = container.practiceRepository.countMatching(currentFilter())
+            draftMatchedCount = container.practiceRepository.countMatching(selection.toFilter())
         }
         ModalBottomSheet(onDismissRequest = { showLimitSheet = false }) {
             Column(
@@ -393,11 +391,11 @@ fun PracticeHomeScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.lg),
                     horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm, Alignment.End),
                 ) {
-                    TextButton(onClick = { limitDraft = LIMIT_DEFAULT }) {
+                    TextButton(onClick = { limitDraft = PracticeSelection.DEFAULT_LIMIT }) {
                         Text(stringResource(R.string.practice_limit_reset))
                     }
                     Button(onClick = {
-                        limit = limitDraft
+                        selection = selection.copy(limit = limitDraft)
                         showLimitSheet = false
                     }) {
                         Text(stringResource(R.string.practice_limit_apply))

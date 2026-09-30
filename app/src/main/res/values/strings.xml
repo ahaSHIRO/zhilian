@@ -67,9 +67,6 @@
     <string name="session_perfect">回答正确</string>
     <string name="session_wrong">回答错误</string>
     <string name="session_partial">部分正确（得分率 %1$d%%）</string>
-    <string name="session_exit_title">退出练习？</string>
-    <string name="session_exit_body">当前练习进度不会恢复，已提交的作答会保留。</string>
-    <string name="session_exit_confirm">退出</string>
     <string name="session_summary_title">练习完成</string>
     <string name="session_summary_body">作答 %1$d 题，答对 %2$d 题，跳过 %3$d 题。</string>
     <!-- 会话得分：满分 100 按题数均分，跳过计 0 分（CONTEXT.md「会话得分」） -->
@@ -111,6 +108,7 @@
     <string name="batch_dir_files">目录中的批次文件</string>
     <string name="batch_preview_line">顺序号 %1$d · 新题 %2$d · 停用 %3$d</string>
     <string name="batch_preview_fail">无法解析（不是合法批次）</string>
+    <string name="batch_preview_loading">加载中…</string>
     <string name="batch_import_action">导入</string>
     <string name="batch_import_all">全部导入</string>
     <string name="batch_import_all_busy">导入中…</string>

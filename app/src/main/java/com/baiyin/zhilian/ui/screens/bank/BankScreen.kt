@@ -30,8 +30,8 @@ import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
-import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.question.QuestionContent
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
@@ -43,9 +43,9 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
-    val allQuestions by container.database.questionDao().observeActive()
+    val allQuestions by container.questionBank.observeQuestions()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val categories by container.database.questionDao().observeCategories()
+    val categories by container.questionBank.observeCategories()
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
 
@@ -176,7 +176,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
                 )
                 QuestionMarkdown(content = q.explanation)
                 TextButton(
-                    onClick = { scope.launch { container.database.questionDao().setFavorite(q.questionId, !q.favorite) } },
+                    onClick = { scope.launch { container.questionBank.setFavorite(q.questionId, !q.favorite) } },
                 ) {
                     Text(
                         if (q.favorite) stringResource(R.string.favorite_remove)
@@ -199,16 +199,10 @@ private fun QuestionEntity.typeLabel(): String = when (type) {
     else -> type
 }
 
-/** 详情页答案预览（人读形式） */
+/** 详情页答案预览（人读形式）；答案解码走 [QuestionContent]，与判分同一份读取 */
 private fun answerPreview(q: QuestionEntity): String = when (q.type) {
-    "true_false" -> if (
-        runCatching { BatchJson.json.decodeFromString<Boolean>(q.answerJson) }.getOrDefault(false)
-    ) "正确" else "错误"
-    "fill_in_blank" -> runCatching {
-        BatchJson.json.decodeFromString<List<String>>(q.answerJson).joinToString(" / ")
-    }.getOrDefault("-")
-    "multiple_choice" -> runCatching {
-        BatchJson.json.decodeFromString<List<String>>(q.answerJson).sorted().joinToString("、")
-    }.getOrDefault("-")
-    else -> runCatching { BatchJson.json.decodeFromString<String>(q.answerJson) }.getOrDefault("-")
+    "true_false" -> if (QuestionContent.trueFalseAnswer(q.answerJson)) "正确" else "错误"
+    "fill_in_blank" -> QuestionContent.blankAcceptables(q.answerJson).joinToString(" / ").ifEmpty { "-" }
+    "multiple_choice" -> QuestionContent.multipleAnswers(q.answerJson).sorted().joinToString("、").ifEmpty { "-" }
+    else -> QuestionContent.singleAnswer(q.answerJson) ?: "-"
 }

@@ -45,10 +45,10 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
         overall = container.practiceRepository.overallAccuracy()
         multiPerfect = container.practiceRepository.multipleChoicePerfectRate()
         avgScore = container.practiceRepository.averageScoreRate()
-        container.database.questionDao().observeActiveCount().collect { questionCount = it }
+        container.questionBank.observeCount().collect { questionCount = it }
     }
     LaunchedEffect(Unit) {
-        container.database.answerRecordDao().observeCount().collect { recordCount = it }
+        container.practiceRepository.observeRecordCount().collect { recordCount = it }
     }
 
     // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住

@@ -6,6 +6,7 @@ import com.baiyin.zhilian.data.db.QuestionDao
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.db.QuestionTagRow
 import com.baiyin.zhilian.data.db.ZhilianDatabase
+import kotlinx.coroutines.flow.Flow
 
 /**
  * 练习筛选条件（README：条件组合 = 全部满足；顺序模式按批次顺序号与文件内顺序）。
@@ -29,8 +30,16 @@ data class PracticeFilter(
 /** 作答提交结果（UI 反馈所需最小集；isFirstAttempt 是落库内部事不外露） */
 data class SubmitSummary(val rate: Double, val perfect: Boolean)
 
-/** 练习选题与作答落库 */
-class PracticeRepository(private val db: ZhilianDatabase) {
+/**
+ * 练习选题与作答落库。
+ *
+ * [clock] 是本模块唯一的外部时间源：作答时间由它给出，测试可替换为固定值钉死时间，
+ * 事务体内不再内联 `System.currentTimeMillis()`。
+ */
+class PracticeRepository(
+    private val db: ZhilianDatabase,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
 
     private val questionDao: QuestionDao = db.questionDao()
 
@@ -137,16 +146,15 @@ class PracticeRepository(private val db: ZhilianDatabase) {
     }
 
     /**
-     * 提交作答：单个 Room 事务内 判首答 → 写作答记录 → 读当前掌握度 → 转移 → 写回（ADR-0004）。
+     * 提交作答：单个 Room 事务内 判首答 → 算落库计划 → 写作答记录 → 写回掌握度（ADR-0004）。
      *
-     * 评分与掌握度转移收口于此接口：调用方只传 (question, answer)，不再自算 scoreRate/isPerfect；
-     * 返回 [SubmitSummary] 供 UI 反馈。事务内 [getById] 读库内当前掌握度，修原先读陈旧实体快照的隐患。
+     * 评分与掌握度转移收口于 [planSubmission]：调用方只传 (question, answer)，不再自算
+     * scoreRate/isPerfect；返回 [SubmitSummary] 供 UI 反馈。事务内 [getById] 读库内当前掌握度，
+     * 修原先读陈旧实体快照的隐患。
      */
     suspend fun submitAnswer(question: QuestionEntity, answer: UserAnswer): SubmitSummary =
         db.withTransaction {
-            val (rate, perfect) = Scoring.score(question, answer)
             val isFirst = db.answerRecordDao().countByQuestion(question.questionId) == 0
-            val outcome = Scoring.outcomeOf(rate, perfect)
             // 读库内当前掌握度（修陈旧快照）；题目必在库，此兜底为防御
             val current = questionDao.getById(question.questionId)
             val currentMastery = if (current != null) {
@@ -154,19 +162,20 @@ class PracticeRepository(private val db: ZhilianDatabase) {
             } else {
                 Mastery(question.consecutivePerfect, question.hasEverWrong)
             }
-            val newMastery = masteryTransition(currentMastery, outcome)
-            db.answerRecordDao().insert(
-                Scoring.toRecord(
-                    question = question,
-                    answer = answer,
-                    scoreRate = rate,
-                    isPerfect = perfect,
-                    isFirstAttempt = isFirst,
-                    answeredAt = System.currentTimeMillis(),
-                )
+            val plan = planSubmission(
+                question = question,
+                answer = answer,
+                isFirstAttempt = isFirst,
+                currentMastery = currentMastery,
+                answeredAt = clock(),
             )
-            questionDao.updateMastery(question.questionId, newMastery.consecutivePerfect, newMastery.hasEverWrong)
-            SubmitSummary(rate, perfect)
+            db.answerRecordDao().insert(plan.record)
+            questionDao.updateMastery(
+                question.questionId,
+                plan.newMastery.consecutivePerfect,
+                plan.newMastery.hasEverWrong,
+            )
+            plan.summary
         }
 
     /**
@@ -182,6 +191,9 @@ class PracticeRepository(private val db: ZhilianDatabase) {
             questionDao.resetAllMastery()
         }
     }
+
+    /** 作答记录条数（统计页） */
+    fun observeRecordCount(): Flow<Int> = db.answerRecordDao().observeCount()
 
     // 统计（README 四项指标）
     suspend fun firstAttemptAccuracy() = questionDao.firstAttemptAccuracy()

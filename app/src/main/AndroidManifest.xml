@@ -8,7 +8,9 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Zhilian"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="false">
+        <!-- 预测性返回已停用（ADR-0009，2026-09-29 撤销）：跟手侧滑/视差实现复杂且效果不达预期，
+             回到经典返回。会话页仍不拦截返回（直退、无确认框），面板返回由组件内部处理。 -->
 
         <activity
             android:name=".MainActivity"

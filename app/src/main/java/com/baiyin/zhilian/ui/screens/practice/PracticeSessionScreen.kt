@@ -1,6 +1,5 @@
 package com.baiyin.zhilian.ui.screens.practice
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -8,15 +7,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -24,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,7 +32,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,24 +45,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
-import com.baiyin.zhilian.data.batch.BatchJson
-import com.baiyin.zhilian.data.batch.OptionDto
-import com.baiyin.zhilian.data.batch.SourceDto
 import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.practice.PracticeSession
+import com.baiyin.zhilian.data.practice.SessionFeedback
+import com.baiyin.zhilian.data.practice.SessionSummary
+import com.baiyin.zhilian.data.practice.SubmitSummary
 import com.baiyin.zhilian.data.practice.UserAnswer
-import kotlin.random.Random
+import com.baiyin.zhilian.data.question.QuestionContent
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.ZhilianOptionRow
-import kotlin.math.roundToInt
+import com.baiyin.zhilian.ui.theme.ZhilianSpacing
+import kotlin.random.Random
 import kotlinx.coroutines.launch
-
-/** 单题提交结果（就地反馈与内联解析依据） */
-private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
 
 /**
  * 练习会话：一题一卡的卡片流（ADR-0003）。
@@ -74,6 +68,9 @@ private data class SubmitResult(val scoreRate: Double, val perfect: Boolean)
  * - 选项打乱：按 questionId 种子稳定打乱单选/多选行序（开关在配置页，默认开）
  * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 会话得分 + 完成）
  * - 首版退出不恢复会话（README），已提交作答保留在库中
+ *
+ * 会话的口径（得分、可提交性、反馈分级、未答定位）全在 [PracticeSession]；
+ * 本页只持有 Compose 瞬时状态并转发事件。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,21 +85,16 @@ fun PracticeSessionScreen(
     /** 未提交的当前作答（按题索引） */
     val answers = remember { mutableStateMapOf<Int, UserAnswer>() }
     /** 已提交结果（按题索引）；存在即该卡为只读反馈态 */
-    val submitted = remember { mutableStateMapOf<Int, SubmitResult>() }
+    val submitted = remember { mutableStateMapOf<Int, SubmitSummary>() }
     /** 点过跳过且未作答的题索引（作答后移除） */
     val skipped = remember { mutableStateMapOf<Int, Boolean>() }
     /** 提交进行中（按题索引）；防双击重复落库（ADR-0004） */
     val submitting = remember { mutableStateMapOf<Int, Boolean>() }
     /** 当前升起半模态解析面板的题索引；null = 面板关闭（ADR-0007） */
     var explanationFor by remember { mutableStateOf<Int?>(null) }
-    var confirmExit by remember { mutableStateOf(false) }
 
     LaunchedEffect(questionIds) {
-        questions = if (questionIds.isEmpty()) {
-            emptyList()
-        } else {
-            container.database.questionDao().getByIds(questionIds)
-        }
+        questions = container.questionBank.get(questionIds)
     }
 
     val scope = rememberCoroutineScope()
@@ -113,13 +105,8 @@ fun PracticeSessionScreen(
         explanationFor = null
     }
 
-    // 面板打开时先返回键关面板，而不是直接退出会话
-    BackHandler(enabled = explanationFor != null) {
-        explanationFor = null
-    }
-    BackHandler(enabled = explanationFor == null) {
-        confirmExit = true
-    }
+    // 返回手势/按键不在此拦截：面板打开时由 ModalBottomSheet 原生预测返回（跟手下移关闭）
+    // 优先消费；面板关闭时返回由 NavHost 接管——侧滑跟手退出会话（ADR-0009），不再弹确认框。
 
     if (questions.isEmpty()) {
         Column(
@@ -130,20 +117,6 @@ fun PracticeSessionScreen(
             CircularProgressIndicator()
         }
         return
-    }
-
-    if (confirmExit) {
-        AlertDialog(
-            onDismissRequest = { confirmExit = false },
-            title = { Text(stringResource(R.string.session_exit_title)) },
-            text = { Text(stringResource(R.string.session_exit_body)) },
-            confirmButton = {
-                TextButton(onClick = onExit) { Text(stringResource(R.string.session_exit_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmExit = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
     }
 
     val pageCount = questions.size + 1
@@ -175,14 +148,14 @@ fun PracticeSessionScreen(
             pageSpacing = ZhilianSpacing.lg,
         ) { page ->
             if (page == questions.size) {
+                // 结尾卡统计与会话得分口径见 CONTEXT.md「会话得分」/ [PracticeSession.summary]
                 SummaryCard(
-                    answered = submitted.size,
-                    perfect = submitted.values.count { it.perfect },
-                    skippedCount = skipped.size,
-                    // 会话得分 = Σ(每题得分率) / 题数 × 100，跳过计 0 分；语义见 CONTEXT.md「会话得分」
-                    score = (submitted.values.sumOf { it.scoreRate } / questions.size * 100).roundToInt(),
+                    summary = PracticeSession.summary(submitted.values, questions.size, skipped.size),
                     questionCount = questions.size,
-                    firstUnansweredIndex = questions.indices.firstOrNull { it !in submitted },
+                    firstUnansweredIndex = PracticeSession.firstUnansweredIndex(
+                        submittedIndices = submitted.keys.toSet(),
+                        questionCount = questions.size,
+                    ),
                     onJumpToUnanswered = { index ->
                         scope.launch { pagerState.animateScrollToPage(index) }
                     },
@@ -205,7 +178,7 @@ fun PracticeSessionScreen(
                                 submitting[page] = true
                                 try {
                                     val summary = container.practiceRepository.submitAnswer(questions[page], userAnswer)
-                                    submitted[page] = SubmitResult(summary.rate, summary.perfect)
+                                    submitted[page] = summary
                                     skipped.remove(page)
                                 } finally {
                                     submitting[page] = false
@@ -250,6 +223,15 @@ fun PracticeSessionScreen(
     }
 }
 
+/** 提交结论文案（题卡横幅与解析面板共用同一分级，避免两处各写一套 when） */
+@Composable
+private fun feedbackText(result: SubmitSummary): String =
+    when (PracticeSession.feedbackOf(result)) {
+        SessionFeedback.Perfect -> stringResource(R.string.session_perfect)
+        SessionFeedback.Partial -> stringResource(R.string.session_partial, (result.rate * 100).toInt())
+        SessionFeedback.Wrong -> stringResource(R.string.session_wrong)
+    }
+
 /**
  * 半模态解析面板内容：反馈结论 + 教材式解析 + 来源（ADR-0007）。
  * 解析在此可垂直滚动，卡片本身不再被解析撑长。
@@ -257,7 +239,7 @@ fun PracticeSessionScreen(
 @Composable
 private fun ExplanationSheet(
     question: QuestionEntity,
-    result: SubmitResult?,
+    result: SubmitSummary?,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -270,14 +252,7 @@ private fun ExplanationSheet(
     ) {
         if (result != null) {
             Text(
-                when {
-                    result.perfect -> stringResource(R.string.session_perfect)
-                    result.scoreRate > 0 -> stringResource(
-                        R.string.session_partial,
-                        (result.scoreRate * 100).toInt(),
-                    )
-                    else -> stringResource(R.string.session_wrong)
-                },
+                feedbackText(result),
                 style = MaterialTheme.typography.titleLarge,
                 color = if (result.perfect) {
                     MaterialTheme.colorScheme.primary
@@ -297,7 +272,7 @@ private fun QuestionCard(
     question: QuestionEntity,
     pageLabel: String,
     userAnswer: UserAnswer?,
-    result: SubmitResult?,
+    result: SubmitSummary?,
     isSkipped: Boolean,
     isSubmitting: Boolean,
     shuffleOptions: Boolean,
@@ -310,35 +285,26 @@ private fun QuestionCard(
     // 选项打乱：以 questionId 为种子的稳定打乱——同一题在任何会话中顺序一致，
     // 滑回上题不闪变；字母（optionId）跟内容走，判分与解析引用不受影响
     val options: List<OptionRow> = remember(question, shuffleOptions) {
-        question.optionsJson?.let {
-            runCatching { BatchJson.json.decodeFromString<List<OptionDto>>(it) }.getOrNull()
-        }?.map { OptionRow(it.optionId, it.text) }
-            ?.stablyShuffled(shuffleOptions, question.questionId.hashCode())
-            ?: emptyList()
+        QuestionContent.options(question.optionsJson)
+            .map { OptionRow(it.optionId, it.text) }
+            .stablyShuffled(shuffleOptions, question.questionId.hashCode())
     }
+    // 答案解码统一走 QuestionContent：四种题型的分派只此一份（判分/预览/会话共用）
     val correctOptionIds: Set<String> = remember(question) {
-        when (question.type) {
-            "single_choice" -> runCatching {
-                setOf(BatchJson.json.decodeFromString<String>(question.answerJson))
-            }.getOrDefault(emptySet())
-            "multiple_choice" -> runCatching {
-                BatchJson.json.decodeFromString<List<String>>(question.answerJson).toSet()
-            }.getOrDefault(emptySet())
-            else -> emptySet()
-        }
+        QuestionContent.correctOptionIds(question.type, question.answerJson)
     }
     val blankAcceptable: List<String> = remember(question) {
         if (question.type == "fill_in_blank") {
-            runCatching { BatchJson.json.decodeFromString<List<String>>(question.answerJson) }
-                .getOrDefault(emptyList())
-        } else emptyList()
+            QuestionContent.blankAcceptables(question.answerJson)
+        } else {
+            emptyList()
+        }
     }
     val trueFalseAnswer: Boolean = remember(question) {
-        if (question.type == "true_false") {
-            runCatching { BatchJson.json.decodeFromString<Boolean>(question.answerJson) }.getOrDefault(false)
-        } else false
+        question.type == "true_false" && QuestionContent.trueFalseAnswer(question.answerJson)
     }
     val revealed = result != null
+    val canSubmit = PracticeSession.canSubmit(question.type, userAnswer)
 
     ZhilianCard(
         modifier = modifier
@@ -469,7 +435,7 @@ private fun QuestionCard(
                 )
             }
 
-            // 操作行：未提交时 跳过 + 提交；提交后由解析区替换
+            // 操作行：未提交时 跳过 + 提交；提交后由反馈横幅替换
             if (!revealed) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.xs),
@@ -480,9 +446,7 @@ private fun QuestionCard(
                     }
                     Button(
                         onClick = onSubmit,
-                        enabled = !isSubmitting && userAnswer != null &&
-                            (question.type != "multiple_choice" ||
-                                (userAnswer as? UserAnswer.Multiple)?.optionIds?.isNotEmpty() == true),
+                        enabled = canSubmit && !isSubmitting,
                         modifier = Modifier.weight(2f),
                     ) {
                         Text(stringResource(R.string.session_submit))
@@ -496,11 +460,7 @@ private fun QuestionCard(
                 val r = result
                 if (r != null) {
                     Text(
-                        when {
-                            r.perfect -> stringResource(R.string.session_perfect)
-                            r.scoreRate > 0 -> stringResource(R.string.session_partial, (r.scoreRate * 100).toInt())
-                            else -> stringResource(R.string.session_wrong)
-                        },
+                        feedbackText(r),
                         style = MaterialTheme.typography.titleLarge,
                         color = if (r.perfect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     )
@@ -513,10 +473,7 @@ private fun QuestionCard(
 /** 结尾卡：会话小结 + 得分 + 未答完提醒 + 完成退出（ADR-0003） */
 @Composable
 private fun SummaryCard(
-    answered: Int,
-    perfect: Int,
-    skippedCount: Int,
-    score: Int,
+    summary: SessionSummary,
     questionCount: Int,
     firstUnansweredIndex: Int?,
     onJumpToUnanswered: (Int) -> Unit,
@@ -536,18 +493,23 @@ private fun SummaryCard(
         ) {
             Text(stringResource(R.string.session_summary_title), style = MaterialTheme.typography.headlineSmall)
             Text(
-                stringResource(R.string.session_summary_body, answered, perfect, skippedCount),
+                stringResource(
+                    R.string.session_summary_body,
+                    summary.answered,
+                    summary.perfect,
+                    summary.skipped,
+                ),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(vertical = ZhilianSpacing.lg),
             )
             Text(
-                stringResource(R.string.session_summary_score, score),
+                stringResource(R.string.session_summary_score, summary.score),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             if (firstUnansweredIndex != null) {
                 Text(
-                    stringResource(R.string.session_unfinished_hint, questionCount - answered),
+                    stringResource(R.string.session_unfinished_hint, questionCount - summary.answered),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -568,9 +530,7 @@ private fun SummaryCard(
 
 @Composable
 private fun SourceLine(question: QuestionEntity) {
-    val source = runCatching {
-        BatchJson.json.decodeFromString<SourceDto>(question.sourceJson)
-    }.getOrNull() ?: return
+    val source = QuestionContent.source(question.sourceJson) ?: return
     val detail = buildString {
         append(stringResource(R.string.source_prefix))
         append(source.title)

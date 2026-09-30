@@ -1,6 +1,5 @@
 package com.baiyin.zhilian.data.batch
 
-import android.content.Context
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.networknt.schema.Schema
@@ -9,18 +8,21 @@ import com.networknt.schema.SpecificationVersion
 import kotlinx.serialization.SerializationException
 
 /**
- * 批次 Schema 校验（规格 v1）。Schema 从 assets 读取（构建时由 Copy 任务从 docs/schema 复制）。
+ * 批次 Schema 校验（规格 v1）。
+ *
+ * 构造函数只取 Schema 文本而不取 [android.content.Context]：读 assets 是适配器
+ * （[BatchImportService]）的事，本类因此不依赖 Android，可直接在 JVM 里单测
+ * （包括下面的中文转述）。Schema 文本的权威来源是 docs/schema/batch-v1.schema.json，
+ * 构建时由 Gradle Copy 任务复制进 assets。
+ *
  * networknt json-schema-validator 2.x：SchemaRegistry + Schema.validate 返回 List<Error>。
  */
-class BatchSchemaValidator(context: Context) {
+class BatchSchemaValidator(schemaText: String) {
 
     private val objectMapper = ObjectMapper()
     private val schema: Schema = SchemaRegistry
         .withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
-        .getSchema(
-            context.assets.open("batch-v1.schema.json")
-                .bufferedReader().use { it.readText() }
-        )
+        .getSchema(schemaText)
 
     data class SchemaIssue(val path: String, val message: String)
 

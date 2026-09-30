@@ -64,6 +64,23 @@ JSON Schema 无法表达的规则，App 导入时必须校验并给出中文原�
 7. `formatVersion ≠ 1`：不导入整个批次，报告「格式版本不兼容，需升级 App 或更换批次」（README）。
 8. 疑似重复判定：候选题 `stem` NFC + trim 归一化后与本机某题完全相同，且 questionId 不同 → 标记疑似重复，等待人工选择（README）。阈值即精确匹配，首版不做模糊相似度。
 
+### 两份实现，一套规则
+
+App 内权威是 `data/batch/BatchImportPlanner`（纯模块，不碰 Context / Room / 系统时钟），
+规则号取本清单编号；电脑端投放前的镜像是 `tools/batch-check.py`。两侧由
+[app-level-fixtures.json](./app-level-fixtures.json) 的共同用例按规则号钉住
+（每个用例只制造一处违规，故短路顺序不同也不会分歧）：
+
+```powershell
+.\gradlew.bat test                          # Kotlin 端：AppLevelFixturesTest
+python tools\batch-check.py --selftest      # 电脑端：同一组用例
+```
+
+任一侧漏掉、或对同一条规则判定不一致，这两条命令之一即失败——防的是
+「电脑端放行、手机端被拒」这类要到验收才暴露的分歧。改动本清单任何一条规则时，
+两侧都要动，并同时更新夹具。清单 7（formatVersion）由 Schema 的 `const` 承担，不在夹具内。
+清单外的补充检查（如「选择题缺少 options」，Schema 已要求）规则号记 `0`，不应出现在夹具里。
+
 ## 版本迁移策略
 
 - `formatVersion` 当前为常量 `1`。

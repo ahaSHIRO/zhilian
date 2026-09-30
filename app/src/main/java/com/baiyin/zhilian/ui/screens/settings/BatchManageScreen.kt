@@ -4,7 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,9 +15,11 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -46,11 +50,18 @@ import com.baiyin.zhilian.data.batch.ImportOutcome
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 目录扫描结果：文件 + 预解析 DTO（非法批次为 null） */
+/** 目录扫描结果：文件 + 预解析 DTO（解析中或非法批次为 null，由 [parsing] 区分） */
 private data class ScannedBatch(val file: DocumentFile, val dto: BatchFileDto?)
+
+/** 按 batchOrder 倒序（解析失败的沉底），再按文件名倒序 */
+private val BATCH_ORDER: Comparator<ScannedBatch> =
+    compareByDescending<ScannedBatch> { it.dto?.batchOrder ?: Int.MIN_VALUE }
+        .thenByDescending { it.file.name ?: "" }
 
 /**
  * 批次管理：SAF 授权 Syncthing 批次目录 → 自动/手动扫描待处理批次 → 单个或全部导入 →
@@ -68,9 +79,9 @@ fun BatchManageScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val treeUri by container.settingsRepository.batchTreeUri
         .collectAsStateWithLifecycle(initialValue = null)
-    val processedBatches by container.database.processedBatchDao().observeAll()
+    val processedBatches by container.importService.observeProcessedBatches()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val pendingDuplicates by container.database.pendingDuplicateDao().observeAll()
+    val pendingDuplicates by container.importService.observePendingDuplicates()
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     var batches by remember { mutableStateOf<List<ScannedBatch>>(emptyList()) }
@@ -93,12 +104,19 @@ fun BatchManageScreen(
         }
     }
 
-    // 扫描批次目录：列出 .json 并预解析 DTO；按 batchOrder 倒序（解析失败的沉底、按文件名倒序）
-    suspend fun scan(uri: Uri): List<ScannedBatch> = withContext(Dispatchers.IO) {
-        val dir = DocumentFile.fromTreeUri(context, uri)
-        dir?.listFiles()
+    // 阶段 1：只列目录（SAF listFiles），拿到文件名就返回——不读文件内容
+    suspend fun listBatchFiles(uri: Uri): List<DocumentFile> = withContext(Dispatchers.IO) {
+        DocumentFile.fromTreeUri(context, uri)
+            ?.listFiles()
             ?.filter { it.isFile && it.name?.endsWith(".json") == true }
-            ?.map { f ->
+            ?.sortedByDescending { it.name ?: "" }
+            ?: emptyList()
+    }
+
+    // 阶段 2：并行读+解析每个文件的 DTO，再按 batchOrder 倒序；SAF openInputStream 各自独立可并行
+    suspend fun parseBatches(files: List<DocumentFile>): List<ScannedBatch> = coroutineScope {
+        files.map { f ->
+            async(Dispatchers.IO) {
                 val dto = runCatching {
                     context.contentResolver.openInputStream(f.uri)
                         ?.bufferedReader()?.use { it.readText() }
@@ -106,24 +124,40 @@ fun BatchManageScreen(
                 }.getOrNull()
                 ScannedBatch(f, dto)
             }
-            ?.sortedWith(
-                compareByDescending<ScannedBatch> { it.dto?.batchOrder ?: Int.MIN_VALUE }
-                    .thenByDescending { it.file.name ?: "" },
-            )
-            ?: emptyList()
+        }.map { it.await() }.sortedWith(BATCH_ORDER)
     }
 
-    // 每次回到页面（含选完目录返回、Syncthing 同步后切回）自动重扫
+    // initialized：首次目录扫描是否完成。未完成前只渲染操作行+转圈，
+    // 不渲染目录/已处理等任何列表 section——否则 Room 的已处理记录先到、SAF 目录
+    // 后到时，目录区会在转场途中「插入顶部」造成几帧跳动（闪烁根因）。
+    // parsing：文件名骨架已上屏、DTO 并行解析中（仅影响卡片副标题文案）。
+    var initialized by remember { mutableStateOf(false) }
+    var parsing by remember { mutableStateOf(false) }
+
+    suspend fun refresh(uri: Uri) {
+        val files = listBatchFiles(uri)
+        // 文件名骨架先上屏（DTO 全 null，按文件名降序，与 batchOrder 前缀一致不会跳动）；
+        // 骨架就绪即解除首帧门控，完整列表一次性出现。
+        batches = files.map { ScannedBatch(it, null) }
+        initialized = true
+        parsing = true
+        batches = parseBatches(files)
+        parsing = false
+    }
+
+    // 每次回到页面（含选完目录返回、Syncthing 同步后切回）自动重扫。
+    // 两阶段上屏：listFiles 返回后立刻用文件名渲染骨架（消除「整页空白等加载」），
+    // DTO 并行解析完再补顺序号/题数与排序。已初始化后的重扫静默进行（布局不跳）。
     DisposableEffect(lifecycleOwner, treeUri) {
         val uri = treeUri
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && uri != null) {
-                scope.launch { batches = scan(uri) }
+                scope.launch { refresh(uri) }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         if (uri != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            scope.launch { batches = scan(uri) }
+            scope.launch { refresh(uri) }
         }
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -133,11 +167,16 @@ fun BatchManageScreen(
         return processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
     }
 
+    // 实底背景：二级页侧滑时页面作为一整张「纸」移动，稀疏卡片之间不再透出下层页面
+    // （background 即雾层 base 同色，视觉与全局雾蓝一致；见 ADR-0005/ADR-0009）
+    //
     // 二级页无底栏（ADR-0010 后外壳只避让状态栏），故此处自行避让手势条：
     // 不给底部 inset 的话，最后一项会压到小白条下。
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(
             start = ZhilianSpacing.screenEdge,
             top = ZhilianSpacing.screenEdge,
@@ -166,6 +205,19 @@ fun BatchManageScreen(
             }
         }
 
+        // 首次扫描未完成：只给一个转圈，其余 section 一律不渲染（避免内容分批到达导致跳动）
+        if (treeUri != null && !initialized) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.xl * 2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(ZhilianSpacing.xl * 2))
+                }
+            }
+        }
+
+        if (initialized) {
         // 待决疑似重复
         if (pendingDuplicates.isNotEmpty()) {
             item {
@@ -242,13 +294,17 @@ fun BatchManageScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(sb.file.name ?: "?", style = MaterialTheme.typography.bodyMedium)
+                            // DTO 解析中显示「加载中」，解析完仍为 null 才是「无法解析」
+                            val subText = when {
+                                preview != null -> stringResource(
+                                    R.string.batch_preview_line,
+                                    preview.batchOrder, preview.questions.size, preview.retiredQuestionIds.size,
+                                )
+                                parsing -> stringResource(R.string.batch_preview_loading)
+                                else -> stringResource(R.string.batch_preview_fail)
+                            }
                             Text(
-                                preview?.let {
-                                    stringResource(
-                                        R.string.batch_preview_line,
-                                        it.batchOrder, it.questions.size, it.retiredQuestionIds.size,
-                                    )
-                                } ?: stringResource(R.string.batch_preview_fail),
+                                subText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -305,6 +361,7 @@ fun BatchManageScreen(
                 }
             }
         }
+        } // if (initialized)
     }
 
     // 单批导入结果报告
@@ -429,11 +486,10 @@ private fun DuplicateResolveDialog(
 ) {
     val scope = rememberCoroutineScope()
     val candidateStem = remember(item.questionJson) { stemPreview(item.questionJson) }
-    val existingStem by container.database.questionDao().let { dao ->
-        androidx.compose.runtime.produceState<String?>(initialValue = null, item.existingQuestionId) {
-            value = dao.getById(item.existingQuestionId)?.stem?.lineSequence()
-                ?.firstOrNull { it.isNotBlank() }
-        }
+    val existingStem by androidx.compose.runtime.produceState<String?>(initialValue = null, item.existingQuestionId) {
+        value = container.questionBank.get(listOf(item.existingQuestionId))
+            .firstOrNull()?.stem?.lineSequence()
+            ?.firstOrNull { it.isNotBlank() }
     }
     AlertDialog(
         onDismissRequest = onResolved,

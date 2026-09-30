@@ -1,0 +1,298 @@
+{
+  "description": "应用级校验清单 1–8 的跨语言共同夹具。两端各自判定、按规则号比对：Kotlin 端见 AppLevelFixturesTest（BatchImportPlanner），电脑端见 python tools/batch-check.py --selftest。规则号即 batch-spec-v1.md §应用级校验清单的编号；0 表示清单之外的补充检查。每个用例只制造一处违规，保证两端的判定不会因短路顺序不同而分歧。清单 7（formatVersion）由 Schema 的 const 承担，不在本夹具内。",
+  "cases": [
+    {
+      "name": "clean-batch",
+      "rules": [],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": ["launch"],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "url": "https://kotlinlang.org/", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      }
+    },
+    {
+      "name": "batch-order-already-taken",
+      "rules": [6],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      },
+      "library": [
+        {
+          "batchId": "77777777-7777-7777-7777-777777777777",
+          "batchOrder": 10,
+          "questions": [
+            { "questionId": "55555555-5555-5555-5555-555555555555", "stem": "库里已有的另一道题" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "duplicate-question-id-inside-batch",
+      "rules": [3],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          },
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      }
+    },
+    {
+      "name": "retired-list-contains-own-new-question",
+      "rules": [4],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": ["11111111-1111-1111-1111-111111111111"]
+      }
+    },
+    {
+      "name": "answer-references-unknown-option",
+      "rules": [1],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "D",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      }
+    },
+    {
+      "name": "duplicate-option-id",
+      "rules": [2],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "A", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      }
+    },
+    {
+      "name": "blank-category",
+      "rules": [5],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "   ",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      }
+    },
+    {
+      "name": "question-id-already-in-library",
+      "rules": [3],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "11111111-1111-1111-1111-111111111111",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "launch 属于哪个作用域？",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "launch 是 CoroutineScope 的扩展。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      },
+      "library": [
+        {
+          "batchId": "77777777-7777-7777-7777-777777777777",
+          "batchOrder": 1,
+          "questions": [
+            { "questionId": "11111111-1111-1111-1111-111111111111", "stem": "库里同 ID 的那道题，题干完全不同" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "same-stem-different-id",
+      "rules": [8],
+      "batch": {
+        "formatVersion": 1,
+        "batchId": "22222222-2222-2222-2222-222222222222",
+        "batchOrder": 10,
+        "createdAt": "2026-01-01",
+        "subject": "kotlin",
+        "questions": [
+          {
+            "questionId": "33333333-3333-3333-3333-333333333333",
+            "type": "single_choice",
+            "category": "协程",
+            "tags": [],
+            "stem": "同一个题干",
+            "options": [
+              { "optionId": "A", "text": "CoroutineScope" },
+              { "optionId": "B", "text": "GlobalScope" }
+            ],
+            "answer": "A",
+            "explanation": "解析。",
+            "source": { "title": "Kotlin 文档", "accessedDate": "2026-01-01" }
+          }
+        ],
+        "retiredQuestionIds": []
+      },
+      "library": [
+        {
+          "batchId": "77777777-7777-7777-7777-777777777777",
+          "batchOrder": 1,
+          "questions": [
+            { "questionId": "44444444-4444-4444-4444-444444444444", "stem": "同一个题干" }
+          ]
+        }
+      ]
+    }
+  ]
+}

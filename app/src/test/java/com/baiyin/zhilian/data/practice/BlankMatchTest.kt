@@ -1,12 +1,14 @@
 package com.baiyin.zhilian.data.practice
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * 填空匹配单测（batch-spec-v1.md：身份比对与填空匹配均在 NFC 规范化后进行）。
+ *
+ * 归一化本身的规则由 [com.baiyin.zhilian.data.question.QuestionContent] 统一持有，
+ * 见 QuestionContentTest；这里只锁「两侧同形归一后比对」的行为面。
  */
 class BlankMatchTest {
 
@@ -28,7 +30,6 @@ class BlankMatchTest {
         // 组合重音：NFD 分解形式 vs NFC 合成形式，视觉相同应判对
         val nfc = "caf\u00E9"          // café（单码点 é）
         val nfd = "cafe\u0301"         // café（e + 组合尖音）
-        assertEquals(nfc, Scoring.normalizeBlank(nfd))
         assertTrue(Scoring.isBlankMatch(nfd, listOf(nfc)))
         assertTrue(Scoring.isBlankMatch(nfc, listOf(nfd)))
     }
@@ -44,11 +45,5 @@ class BlankMatchTest {
     @Test
     fun rejects_non_matching_input() {
         assertFalse(Scoring.isBlankMatch("var", listOf("fun")))
-    }
-
-    @Test
-    fun normalize_blank_is_nfc_plus_trim() {
-        assertEquals("fun", Scoring.normalizeBlank("  fun  "))
-        assertEquals("caf\u00E9", Scoring.normalizeBlank("cafe\u0301"))
     }
 }

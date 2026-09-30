@@ -21,6 +21,15 @@ data class QuestionTagRow(
     @ColumnInfo(name = "tags_json") val tagsJson: String,
 )
 
+/**
+ * 题干反查用的投影：归一化题干 → 题目 ID。
+ * 导入时一次性取回整批，供疑似重复判定（spec §应用级校验 8）在纯规划里查表。
+ */
+data class StemOwnerRow(
+    @ColumnInfo(name = "question_id") val questionId: String,
+    @ColumnInfo(name = "stem") val stem: String,
+)
+
 @Dao
 interface QuestionDao {
 
@@ -31,9 +40,9 @@ interface QuestionDao {
     @Query("SELECT question_id FROM questions WHERE question_id IN (:ids)")
     suspend fun existingIds(ids: List<String>): List<String>
 
-    /** 与候选题干（NFC+trim 归一化）完全相同的既有题（疑似重复判定材料） */
-    @Query("SELECT * FROM questions WHERE stem = :normalizedStem AND inactive = 0 LIMIT 5")
-    suspend fun findByStem(normalizedStem: String): List<QuestionEntity>
+    /** 与候选题干（NFC+trim 归一化）完全相同的既有题（疑似重复判定材料，清单 8） */
+    @Query("SELECT question_id, stem FROM questions WHERE stem IN (:stems) AND inactive = 0")
+    suspend fun findStemOwners(stems: List<String>): List<StemOwnerRow>
 
     @Query("SELECT * FROM questions WHERE question_id = :id")
     suspend fun getById(id: String): QuestionEntity?
