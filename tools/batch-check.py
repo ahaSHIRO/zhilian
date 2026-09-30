@@ -37,7 +37,8 @@ except ImportError:
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_PATH = os.path.join(REPO_ROOT, "docs", "schema", "batch-v1.schema.json")
-DEFAULT_BATCHES_DIR = r"<Syncthing 批次目录>"
+# 本机批次目录走环境变量 ZHILIAN_BATCHES_DIR（个人路径不进公开仓库）；未设置时回落当前目录
+DEFAULT_BATCHES_DIR = os.environ.get("ZHILIAN_BATCHES_DIR", ".")
 
 # 规则号 = batch-spec-v1.md §应用级校验清单的编号；0 = 清单之外的补充检查。
 # 与 Kotlin 端 BatchRules 同号，两侧由 docs/schema/app-level-fixtures.json 共同夹具钉住

@@ -23,7 +23,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vocab import FROZEN_TAGS, load_vocabulary  # noqa: E402
 
-DEFAULT_BATCHES_DIR = r"<Syncthing 批次目录>"
+# 本机批次目录走环境变量 ZHILIAN_BATCHES_DIR（个人路径不进公开仓库）；未设置时回落当前目录
+DEFAULT_BATCHES_DIR = os.environ.get("ZHILIAN_BATCHES_DIR", ".")
 
 TYPE_LABELS = {
     "single_choice": "单选",
