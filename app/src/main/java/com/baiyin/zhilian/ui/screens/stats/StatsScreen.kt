@@ -3,8 +3,10 @@ package com.baiyin.zhilian.ui.screens.stats
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,6 +14,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +51,8 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
         container.database.answerRecordDao().observeCount().collect { recordCount = it }
     }
 
+    // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
+    val bottomBarPadding = rememberBottomBarContentPadding()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -87,6 +92,7 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
             value = percent(avgScore),
             progress = avgScore,
         )
+        Spacer(modifier = Modifier.height(bottomBarPadding))
     }
 }
 

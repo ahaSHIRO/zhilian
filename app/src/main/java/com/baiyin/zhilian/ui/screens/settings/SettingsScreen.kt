@@ -2,8 +2,10 @@ package com.baiyin.zhilian.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,8 +30,12 @@ import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
-import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.data.BottomBarStyle
 import com.baiyin.zhilian.ui.theme.ThemeMode
+import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.components.isLiquidGlassSupported
+import com.baiyin.zhilian.ui.components.label
+import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import kotlinx.coroutines.launch
 
 /**
@@ -43,10 +49,14 @@ fun SettingsScreen(
 ) {
     val themeMode by container.settingsRepository.themeMode
         .collectAsStateWithLifecycle(initialValue = ThemeMode.FOLLOW_SYSTEM)
+    val bottomBarStyle by container.settingsRepository.bottomBarStyle
+        .collectAsStateWithLifecycle(initialValue = BottomBarStyle.LIQUID_GLASS)
     val scope = rememberCoroutineScope()
     var confirmClear by remember { mutableStateOf(false) }
     var showCleared by remember { mutableStateOf(false) }
 
+    // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
+    val bottomBarPadding = rememberBottomBarContentPadding()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -84,6 +94,40 @@ fun SettingsScreen(
                         }
                     }
                 }
+
+                // ---- 底栏效果（ADR-0010）----
+                Text(
+                    text = stringResource(R.string.settings_bottom_bar_style),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                val liquidGlassSupported = isLiquidGlassSupported(android.os.Build.VERSION.SDK_INT)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    BottomBarStyle.entries.forEachIndexed { index, styleOption ->
+                        // 低版本设备的液态玻璃项置灰：AGSAL 折射需 Android 13+，
+                        // 静默降级会让用户以为“选了没效果”，故直接不可选并给出说明
+                        val enabled = styleOption != BottomBarStyle.LIQUID_GLASS || liquidGlassSupported
+                        SegmentedButton(
+                            selected = bottomBarStyle == styleOption,
+                            enabled = enabled,
+                            onClick = {
+                                scope.launch { container.settingsRepository.setBottomBarStyle(styleOption) }
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = BottomBarStyle.entries.size,
+                            ),
+                        ) {
+                            Text(styleOption.label())
+                        }
+                    }
+                }
+                if (!liquidGlassSupported) {
+                    Text(
+                        text = stringResource(R.string.bottom_bar_liquid_glass_requires),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -119,6 +163,8 @@ fun SettingsScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(bottomBarPadding))
     }
 
     if (confirmClear) {

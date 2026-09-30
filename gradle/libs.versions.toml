@@ -14,6 +14,11 @@ jsonSchemaValidator = "2.0.7"
 markdownRenderer = "0.45.0"
 documentFile = "1.0.1"
 junit = "4.13.2"
+# 原型用：液态玻璃底栏可行性评估（Backdrop, Apache-2.0）
+backdrop = "2.0.1"
+# 连续曲率圆角（Capsule/RoundedRectangle）；backdrop 只在 runtime 依赖它，
+# 编译期要用 Capsule() 必须显式声明，版本须与 backdrop 内部依赖一致
+shapes = "1.2.1"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -37,6 +42,8 @@ markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-
 markdown-renderer-code = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-code", version.ref = "markdownRenderer" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentFile" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
+shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "shapes" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

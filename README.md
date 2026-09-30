@@ -9,6 +9,7 @@
 ## 已确认首版范围
 
 - **平台**：Android 17 设备；Kotlin；Jetpack Compose；Room/SQLite；简体中文 UI；个人自用，APK 安装，包名 com.baiyin.zhilian；**竖屏锁定**（`screenOrientation="portrait"`）；依赖注入手动构造，不引入 DI 框架。
+- **外观**：固定雾蓝配色（ADR-0005）+ 深色模式三态（跟随系统/浅色/深色）。底部导航栏三档效果可选——**标准 / 液态玻璃 / 磨砂**，默认液态玻璃；液态玻璃折射页面内容，**底栏本体与选中项共用同一套玻璃配方**（镜面高光 + 内缘压暗 + 边缘色散 + 外投影，故材质在任意 tab 下一致），按住选中项时像水珠一样鼓起（需 Android 13+，低版本该选项置灰并自动使用磨砂）。底栏支持**按住水平拖动切换 tab**（胶囊跟手、拖快时拉伸、松手吸附、跨格轻震），也保留点击切换。底栏是悬浮胶囊浮层、内容穿其背后，故各 tab 屏底部留白由页面自行处理。详见 ADR-0010。
 - **项目起点**：创建独立的新项目。允许复用 GitHub 等来源的成熟开源组件；开发前评估活跃度、兼容性、维护风险与许可证义务，不为避免依赖而重复造轮子。
 - **题目创作**：AI 可使用只读 Obsidian 笔记和菜鸟教程作为素材；使用其他网络来源前由维护者指定。出题代理（含外部新会话）的边界、标签词表与冷启动指引见 `docs/conventions/question-authoring.md` §七/§八。题目尽量原创改写，不大段复制来源文本。记录来源标题、链接及访问日期。AI 输出带格式版本、批次 ID、批次顺序号和题目 ID 的 JSON 文件；经 AI 对抗复审与维护者验收后放入 Syncthing 批次目录。首版不开发 AI 出题工具或电脑端批次编辑器。
 - **正确性把关**：维护者正是本题库的学习者，不具备判断答案对错的能力，故**正确性不由人工判断**——原「人工审核」改为「复审 + 验收」两道：**复审**由未参与出题的代理冷启动完成（不接触答案与解析独立作答，再核验答案唯一性、干扰项质量、解析自证性与来源有效性），**验收**由维护者做体感判断（看得懂、深浅合适；同一考点可变式多考但考法不得雷同）并保留一票否决。解析采用教材式写法（前置概念、易错点、变体提示）。详见 ADR-0006。
@@ -48,7 +49,7 @@
 - JSON 批次格式已定案 v1（2026-09-27；2026-09-28 修订 `subject` 枚举扩为 kotlin / java / arkts，ArkTS 为占位；2026-09-29 扩入 `interview` 面试科目）：Schema 与规格见 docs/schema/（字段、枚举、约束、版本迁移策略、应用级校验清单）。出题端按此生成，App 导入前逐题校验。
 - 疑似重复判定：方法已定为题干 NFC+trim 归一化精确相同且 ID 不同（见 docs/schema/batch-spec-v1.md）；导入页提供逐条人工裁决对话框（新题与已有题并排，选导入或跳过），批量导入不绕过该裁决。
 - 科目/标签身份规范已定案 v1：科目为 Schema 枚举小写代码（当前为 `kotlin`、`java`、`interview`，另有 `arkts` 占位）；分类名字即身份（科目内 NFC+trim 精确匹配），不同科目的同名分类互不干扰；标签建议全小写、区分大小写。
-- 第三方依赖核查（2026-09-27 已完成）：Markdown 渲染与代码高亮用 multiplatform-markdown-renderer（Apache-2.0，含 -m3/-code 模块，纯文字无需图片模块）；批次 JSON Schema 校验用 networknt json-schema-validator 2.x Android 兼容线（Apache-2.0）；JSON 解析用 kotlinx-serialization；Markwon/prism4j/compose-richtext 已核实排除（停更或 alpha）。均为 Apache-2.0/MIT，义务限于保留版权与 NOTICE。引入时以当时最新稳定版复核。
+- 第三方依赖核查（2026-09-27 已完成；2026-09-29 补底栏玻璃）：Markdown 渲染与代码高亮用 multiplatform-markdown-renderer（Apache-2.0，含 -m3/-code 模块，纯文字无需图片模块）；批次 JSON Schema 校验用 networknt json-schema-validator 2.x Android 兼容线（Apache-2.0）；JSON 解析用 kotlinx-serialization；**底栏液态玻璃**用 io.github.kyant0:backdrop 2.0.1 + io.github.kyant0:shapes 1.2.1（均 Apache-2.0；backdrop 为 Compose Multiplatform 构件，Android 变体转发 androidx，已用 `checkDebugDuplicateClasses` 验证不与本项目 Compose 版本冲突，AAR 声明 minSdk 21 不抬高本项目下限；shapes 必须显式声明，因其在 backdrop 内仅为 runtime 依赖）；Markwon/prism4j/compose-richtext 已核实排除（停更或 alpha）。均为 Apache-2.0/MIT，义务限于保留版权与 NOTICE。引入时以当时最新稳定版复核。
 
 ## 领域词汇
 

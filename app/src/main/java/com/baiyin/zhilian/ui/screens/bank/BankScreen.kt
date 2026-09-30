@@ -34,6 +34,7 @@ import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import kotlinx.coroutines.launch
 
 /**
@@ -103,10 +104,16 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             )
         }
 
+        // 底栏是浮层、内容穿到它背后（ADR-0010）：列表底部留出底栏高度，
+        // 否则最后一道题被永久遮住。用 contentPadding 而非外层 padding，内容才能滚到底栏背后。
+        val bottomBarPadding = rememberBottomBarContentPadding()
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = ZhilianSpacing.sm),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                top = ZhilianSpacing.sm,
+                bottom = bottomBarPadding,
+            ),
         ) {
             items(filtered, key = { it.questionId }) { q ->
                 ZhilianCard(

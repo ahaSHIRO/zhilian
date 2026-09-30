@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalView
 
 /**
@@ -88,50 +89,62 @@ fun ZhilianTheme(
 
 /**
  * 背景光雾层：底色 + 错落蓝色 radialGradient 光斑。
- * radialGradient 中心实、边缘衰减，衰减曲线本身即高斯式柔和，无需 RenderEffect。
- * 光斑只用 primary/accent 的极低透明度，整屏透出淡蓝雾感；卡片不透明白底在雾上悬浮。
- *
- * 光斑位置按实际尺寸比例定位（radialGradient 的 center 是像素坐标，
- * 必须在 drawBehind 里拿到 size 再换算，不能用固定像素或比例值直接传）。
+ * 绘制命令抽在 [drawZhilianFog]，与 App 外壳的底栏 backdrop 共用同一套实现。
  */
 @Composable
 private fun BackgroundFog(darkTheme: Boolean) {
-    val base = if (darkTheme) Color(0xFF0F1419) else Color(0xFFF4F6F8)
-    val fog = if (darkTheme) Color(0xFF1B2A3A) else Color(0xFF9DB7D4)
-    val accent = Color(0xFF95FEFF)
     Box(
         Modifier
             .fillMaxSize()
-            .background(base)
-            .drawBehind {
-                // 左上主雾斑
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(fog.copy(alpha = 0.20f), Color.Transparent),
-                        center = Offset(size.width * 0.18f, size.height * 0.14f),
-                        radius = size.minDimension * 0.85f,
-                    )
-                )
-                // 右下副雾斑
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(fog.copy(alpha = 0.14f), Color.Transparent),
-                        center = Offset(size.width * 0.85f, size.height * 0.68f),
-                        radius = size.minDimension * 1.0f,
-                    )
-                )
-                // 底部透青点缀
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            accent.copy(alpha = if (darkTheme) 0.05f else 0.07f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.5f, size.height * 0.96f),
-                        radius = size.minDimension * 0.7f,
-                    )
-                )
-            }
+            .background(zhilianBaseColor(darkTheme))
+            .drawBehind { drawZhilianFog(darkTheme) }
+    )
+}
+
+/** 知练底色（深浅两态）；底栏 backdrop 与光雾层共用，避免两处各写一份 */
+internal fun zhilianBaseColor(darkTheme: Boolean): Color =
+    if (darkTheme) Color(0xFF0F1419) else Color(0xFFF4F6F8)
+
+/**
+ * 光雾绘制命令：底色之上的错落蓝色 radialGradient 光斑。
+ * radialGradient 中心实、边缘衰减，衰减曲线本身即高斯式柔和，无需 RenderEffect。
+ * 光斑只用 primary/accent 的极低透明度，整屏透出淡蓝雾感；卡片不透明白底在雾上悬浮。
+ *
+ * 之所以抽成独立 DrawScope 扩展：底栏液态玻璃要折射**完整**背景，App 外壳录
+ * backdrop 时必须把同一套光雾画进去；两处各写一份必然漂移（ADR-0010）。
+ *
+ * 光斑位置按实际尺寸比例定位（radialGradient 的 center 是像素坐标，
+ * 必须拿到 size 再换算，不能用固定像素或比例值直接传）。
+ */
+internal fun DrawScope.drawZhilianFog(darkTheme: Boolean) {
+    val fog = if (darkTheme) Color(0xFF1B2A3A) else Color(0xFF9DB7D4)
+    val accent = Color(0xFF95FEFF)
+    // 左上主雾斑
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(fog.copy(alpha = 0.20f), Color.Transparent),
+            center = Offset(size.width * 0.18f, size.height * 0.14f),
+            radius = size.minDimension * 0.85f,
+        )
+    )
+    // 右下副雾斑
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(fog.copy(alpha = 0.14f), Color.Transparent),
+            center = Offset(size.width * 0.85f, size.height * 0.68f),
+            radius = size.minDimension * 1.0f,
+        )
+    )
+    // 底部透青点缀
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                accent.copy(alpha = if (darkTheme) 0.05f else 0.07f),
+                Color.Transparent,
+            ),
+            center = Offset(size.width * 0.5f, size.height * 0.96f),
+            radius = size.minDimension * 0.7f,
+        )
     )
 }
 

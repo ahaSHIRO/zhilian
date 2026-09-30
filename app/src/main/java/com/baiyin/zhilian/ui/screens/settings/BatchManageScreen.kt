@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -130,11 +133,16 @@ fun BatchManageScreen(
         return processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
     }
 
+    // 二级页无底栏（ADR-0010 后外壳只避让状态栏），故此处自行避让手势条：
+    // 不给底部 inset 的话，最后一项会压到小白条下。
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(
-            horizontal = ZhilianSpacing.screenEdge,
-            vertical = ZhilianSpacing.screenEdge,
+            start = ZhilianSpacing.screenEdge,
+            top = ZhilianSpacing.screenEdge,
+            end = ZhilianSpacing.screenEdge,
+            bottom = ZhilianSpacing.screenEdge + navBarPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
     ) {

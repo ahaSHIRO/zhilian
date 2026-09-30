@@ -22,7 +22,7 @@ python tools\batch-check.py <批次.json>   # 批次 JSON 预校验
 | `app/src/test/` | JVM 单测（判分、掌握度、填空匹配等） |
 | `docs/conventions/` | question-authoring.md（出题规范）、pitfalls.md（踩坑手册）、edge-to-edge.md、design-tokens.md |
 | `docs/schema/` | batch-v1.schema.json + batch-spec-v1.md（批次 JSON 权威契约） |
-| `docs/adr/` | 已定案决策记录（0001–0008） |
+| `docs/adr/` | 已定案决策记录（0001–0010） |
 | `tools/batch-check.py` | 批次预校验（Schema + 应用级规则 + 跨批次重复） |
 | `CONTEXT.md` | 领域词汇表（科目/分类/标签/题目的身份语义） |
 
@@ -33,6 +33,7 @@ python tools\batch-check.py <批次.json>   # 批次 JSON 预校验
 | 出题 / 改出题流程 | [docs/conventions/question-authoring.md](docs/conventions/question-authoring.md) 开头的「冷启动指引」块 |
 | 改 UI 交互 | docs/adr/——已定案交互勿重开议题，修订走 ADR 修订段 |
 | 改主题 / 间距 / 字体 | docs/conventions/design-tokens.md（token 档位值表） |
+| 改底栏 / 玻璃效果 / 屏幕底部留白 | docs/adr/0010-bottom-bar-liquid-glass-and-content-through.md + docs/conventions/edge-to-edge.md §底栏穿透（**内容穿底栏是刻意的，勿当 bug 修**） |
 | 遇到怪问题 | docs/conventions/pitfalls.md——先查有没有人踩过，踩了新坑修完追加 |
 | 动批次 JSON 字段 | docs/schema/batch-spec-v1.md + batch-v1.schema.json（Schema 为权威） |
 

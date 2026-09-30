@@ -14,6 +14,11 @@
     <string name="theme_mode_follow_system">跟随系统</string>
     <string name="theme_mode_light">浅色</string>
     <string name="theme_mode_dark">深色</string>
+    <string name="settings_bottom_bar_style">底栏效果</string>
+    <string name="bottom_bar_standard">标准</string>
+    <string name="bottom_bar_liquid_glass">液态玻璃</string>
+    <string name="bottom_bar_frosted">磨砂</string>
+    <string name="bottom_bar_liquid_glass_requires">液态玻璃需要 Android 13 及以上，当前设备已自动使用磨砂效果。</string>
     <string name="settings_data">数据</string>
     <string name="settings_batch_import">批次导入</string>
     <string name="settings_batch_hint">选择 Syncthing 批次同步目录后，App 仅扫描该目录下的 JSON 批次文件。</string>

@@ -14,10 +14,22 @@
 | 区域 | 谁负责 | 做法 |
 |---|---|---|
 | 状态栏 | 各屏 Scaffold + 顶栏 | Scaffold 默认 `contentWindowInsets` 已含 `safeDrawing`；带 TopAppBar 的屏自动避让 |
-| 小白条 | 底部导航栏 | `NavigationBar` 默认 `windowInsets = NavigationBarDefaults.windowInsets`，自动避让并染底色，勿覆盖 |
+| 小白条 | **底栏自身**（悬浮胶囊） | `ZhilianBottomBar` 内部 `windowInsetsPadding(navigationBars ∪ ime)`，内容穿到它背后但不压在小白条上；见 §底栏穿透 |
 | 无底栏的屏 | 屏内容 | `Modifier.windowInsetsPadding(WindowInsets.safeDrawing)` 或 Scaffold `innerPadding` |
 | 输入法 | 文本输入区 | 填空题输入处 `Modifier.imePadding()`；提交按钮贴 IME 上缘时用 `imePadding()` 而非 `navigationBarsPadding()` 叠加 |
 | 底部弹层 / 半模态面板 | ModalBottomSheet | 组件自身处理导航条 inset，不在 content 里再加 navigationBarsPadding |
+
+## 底栏穿透（ADR-0010）
+
+底栏改为**悬浮胶囊浮层**后，避让模型与 M3 `NavigationBar` 时代不同，必须遵守：
+
+1. **外壳只避让状态栏**：`ZhilianApp` 的 NavHost 只 `padding(top = innerPadding.calculateTopPadding())`，**不再给底部避让**——内容穿到底栏背后，玻璃才有内容可折射。
+2. **各 tab 屏自行留底部空间**：用 `rememberBottomBarContentPadding()`（底栏高 + 上下留白 + 手势条），否则最后一项/最后一张卡被底栏永久遮住。
+   - `LazyColumn`：`contentPadding = PaddingValues(bottom = …)`
+   - `verticalScroll` 的 Column：**内容末尾加 `Spacer(height = …)`**，不能用外层 padding（外层 padding 会把内容截在底栏之上，穿透失效）。
+3. **无底栏的屏不受影响**：练习会话页、批次管理页不显示底栏，保持各自现有的 `windowInsetsPadding` 避让，不需加底部留白。
+4. **底栏不可被内容覆盖**：外壳中底栏绘制在 NavHost **之后**（`Box` 内后声明），保证它在最上层。
+5. **拖动切换与返回手势**（ADR-0010 修订）：底栏支持按住水平拖动切换 tab。最左 tab 距屏幕左缘约 20dp（16dp `screenEdge` + 4dp 内边距），可能与系统返回手势的触发区（通常边缘 20–24dp）重叠。若实测出现「从最左往右拖触发返回而非拖动」，加大左右安全边距或限制边缘起拖——**这是已知待验证项，不是未实现的缺陷**。
 
 ## 屏幕级约定
 
@@ -39,8 +51,10 @@
 ## 验收清单
 
 - [ ] 无设备帧内出现状态栏底色或渐变遮罩
-- [ ] 小白条区域：列表内容可见但可滚动穿过，底部导航不与其重叠
+- [ ] 小白条区域：列表内容可见但可滚动穿过，底栏不与其重叠
 - [ ] 弹出键盘：输入框可见，提交按钮贴键盘上缘
 - [ ] 深浅色切换：状态栏图标颜色自动翻转正确
+- [ ] **底栏穿透**（ADR-0010）：任意 tab 屏滚到底，最后一项/最后一张卡完整可见、未被底栏遮住；滚动途中内容能出现在底栏背后（玻璃有可折射物）
+- [ ] **无底栏的屏**（练习会话页、批次管理页）底部不被多留一块空白
 
 > 布局间距 token（padding/spacedBy 等，非系统栏避让）见 [design-tokens.md](./design-tokens.md)。

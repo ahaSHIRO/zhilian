@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_BATCH_TREE_URI = "batch_tree_uri"
+private const val KEY_BOTTOM_BAR_STYLE = "bottom_bar_style"
 
 // DataStore 单例委托必须是顶层属性，避免多实例异常
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -34,6 +35,16 @@ class SettingsRepository(context: Context) {
 
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { it[stringPreferencesKey(KEY_THEME_MODE)] = mode.name }
+    }
+
+    /** 底栏效果（ADR-0010）。默认液态玻璃；低版本设备由调用方降级为磨砂。 */
+    val bottomBarStyle: Flow<BottomBarStyle> = dataStore.data.map { prefs ->
+        val stored = prefs[stringPreferencesKey(KEY_BOTTOM_BAR_STYLE)]
+        BottomBarStyle.entries.firstOrNull { it.name == stored } ?: BottomBarStyle.LIQUID_GLASS
+    }
+
+    suspend fun setBottomBarStyle(style: BottomBarStyle) {
+        dataStore.edit { it[stringPreferencesKey(KEY_BOTTOM_BAR_STYLE)] = style.name }
     }
 
     /** Syncthing 批次目录（SAF tree URI），未授权时为 null */

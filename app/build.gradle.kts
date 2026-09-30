@@ -96,6 +96,10 @@ dependencies {
     implementation(libs.markdown.renderer.m3)
     implementation(libs.markdown.renderer.code)
     implementation(libs.androidx.documentfile)
+    // 底栏液态玻璃（ADR-0010）：backdrop 提供折射/模糊/透镜与高光阴影；
+    // shapes 提供连续曲率胶囊（backdrop 仅 runtime 依赖它，编译期需显式声明）
+    implementation(libs.backdrop)
+    implementation(libs.shapes)
     ksp(libs.androidx.room.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

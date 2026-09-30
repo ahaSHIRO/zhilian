@@ -9,18 +9,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
@@ -31,12 +30,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.baiyin.zhilian.AppContainer
+import com.baiyin.zhilian.data.BottomBarStyle
+import com.baiyin.zhilian.ui.components.ZhilianBottomBar
+import com.baiyin.zhilian.ui.components.resolveBottomBarStyle
 import com.baiyin.zhilian.ui.screens.bank.BankScreen
 import com.baiyin.zhilian.ui.screens.practice.PracticeHomeScreen
 import com.baiyin.zhilian.ui.screens.practice.PracticeSessionScreen
 import com.baiyin.zhilian.ui.screens.settings.BatchManageScreen
 import com.baiyin.zhilian.ui.screens.settings.SettingsScreen
 import com.baiyin.zhilian.ui.screens.stats.StatsScreen
+import com.baiyin.zhilian.ui.theme.LocalZhilianDarkTheme
+import com.baiyin.zhilian.ui.theme.drawZhilianFog
+import com.baiyin.zhilian.ui.theme.zhilianBaseColor
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /** 子页面路由（不在底部导航显示） */
 const val ROUTE_PRACTICE_SESSION = "practice_session"
@@ -82,9 +89,15 @@ private fun NavGraphBuilder.tabDestination(
 )
 
 /**
- * 单 Scaffold + 底部导航 + NavHost 的应用外壳。
- * 沉浸式避让由 Scaffold innerPadding 与 NavigationBar 默认 inset 完成，
- * 规范见 docs/conventions/edge-to-edge.md。
+ * 单 Scaffold + 悬浮底栏 + NavHost 的应用外壳。
+ *
+ * 底栏是**浮层**（ADR-0010）：内容延伸到屏幕底部、穿到底栏背后，玻璃才有内容可折射。
+ * 因此这里只避让**状态栏**，底部避让由各 tab 屏自行用 `rememberBottomBarContentPadding()`
+ * 留白（`LazyColumn` 走 `contentPadding`，`verticalScroll` 在末尾加 Spacer）。
+ * 子系统避让总规范见 docs/conventions/edge-to-edge.md。
+ *
+ * 背景光雾与底栏折射源是同一份：外壳录一份 layerBackdrop（底色 + 光雾 + 页面内容），
+ * 底栏从中取样——两处若各画一套，光雾位置必然漂移。
  */
 @Composable
 fun ZhilianApp(
@@ -97,96 +110,103 @@ fun ZhilianApp(
     val showBottomBar = TopLevelDestination.entries.any { top ->
         currentDestination?.hierarchy?.any { it.route == top.route } == true
     }
+    val selectedRoute = TopLevelDestination.entries
+        .firstOrNull { top -> currentDestination?.hierarchy?.any { it.route == top.route } == true }
+        ?.route
 
-    Scaffold(
-        modifier = modifier,
-        // containerColor 透明是为了透出雾蓝背景层（BackgroundFog），但这会让
-        // contentColorFor(Transparent) 解析为 Unspecified，LocalContentColor 断链回落
-        // 到默认黑色——页面上所有未写显式颜色的裸 Text（各页 section 标题）会黑字。
-        // 必须显式给 contentColor 补回当前主题的 onSurface。
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    TopLevelDestination.entries.forEach { destination ->
-                        val selected = currentDestination?.hierarchy?.any {
-                            it.route == destination.route
-                        } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    // 单一级栈：回到起点再切目的地，保存/恢复各页状态
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(
-                                        if (selected) destination.selectedIconRes
-                                        else destination.unselectedIconRes
-                                    ),
-                                    contentDescription = stringResource(destination.labelRes),
-                                )
-                            },
-                            label = { Text(stringResource(destination.labelRes)) },
-                        )
-                    }
+    val style by container.settingsRepository.bottomBarStyle
+        .collectAsStateWithLifecycle(initialValue = BottomBarStyle.LIQUID_GLASS)
+    // 低版本设备静默退到磨砂：纯函数解析，便于单测（ADR-0010）
+    val effectiveStyle = resolveBottomBarStyle(style, android.os.Build.VERSION.SDK_INT)
+
+    val dark = LocalZhilianDarkTheme.current
+    val backdrop = rememberLayerBackdrop {
+        drawRect(zhilianBaseColor(dark))
+        drawZhilianFog(dark)
+        drawContent()
+    }
+
+    Box(modifier.fillMaxSize()) {
+        Scaffold(
+            // containerColor 透明是为了透出雾蓝背景层（BackgroundFog），但这会让
+            // contentColorFor(Transparent) 解析为 Unspecified，LocalContentColor 断链回落
+            // 到默认黑色——页面上所有未写显式颜色的裸 Text（各页 section 标题）会黑字。
+            // 必须显式给 contentColor 补回当前主题的 onSurface。
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            // 底栏改由下方浮层绘制；Scaffold 只负责状态栏避让
+            bottomBar = {},
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = TopLevelDestination.PRACTICE.route,
+                modifier = Modifier
+                    .layerBackdrop(backdrop)
+                    // 只避让状态栏：底部留给内容穿透底栏
+                    .padding(top = innerPadding.calculateTopPadding()),
+            ) {
+                tabDestination(TopLevelDestination.PRACTICE.route) {
+                    PracticeHomeScreen(
+                        container = container,
+                        onStartPractice = { questionIds, shuffleOptions ->
+                            navController.currentBackStackEntry?.savedStateHandle?.set("questionIds", questionIds)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("shuffleOptions", shuffleOptions)
+                            navController.navigate(ROUTE_PRACTICE_SESSION)
+                        },
+                    )
+                }
+                tabDestination(TopLevelDestination.BANK.route) {
+                    BankScreen(container = container)
+                }
+                tabDestination(TopLevelDestination.STATS.route) {
+                    StatsScreen(container = container)
+                }
+                tabDestination(TopLevelDestination.SETTINGS.route) {
+                    SettingsScreen(
+                        container = container,
+                        onOpenBatches = { navController.navigate(ROUTE_BATCHES) },
+                    )
+                }
+                composable(ROUTE_PRACTICE_SESSION) {
+                    // 题目 ID 由发起页 savedStateHandle 传递，经 NavController.previousBackStackEntry 读取（官方模式）
+                    val questionIds = navController.previousBackStackEntry
+                        ?.savedStateHandle?.get<List<String>>("questionIds").orEmpty()
+                    val shuffleOptions = navController.previousBackStackEntry
+                        ?.savedStateHandle?.get<Boolean>("shuffleOptions") ?: true
+                    PracticeSessionScreen(
+                        container = container,
+                        questionIds = questionIds,
+                        shuffleOptions = shuffleOptions,
+                        onExit = { navController.popBackStack() },
+                    )
+                }
+                composable(ROUTE_BATCHES) {
+                    BatchManageScreen(
+                        container = container,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
             }
-        },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = TopLevelDestination.PRACTICE.route,
-            modifier = Modifier.padding(innerPadding),
-        ) {
-            tabDestination(TopLevelDestination.PRACTICE.route) {
-                PracticeHomeScreen(
-                    container = container,
-                    onStartPractice = { questionIds, shuffleOptions ->
-                        navController.currentBackStackEntry?.savedStateHandle?.set("questionIds", questionIds)
-                        navController.currentBackStackEntry?.savedStateHandle?.set("shuffleOptions", shuffleOptions)
-                        navController.navigate(ROUTE_PRACTICE_SESSION)
-                    },
-                )
-            }
-            tabDestination(TopLevelDestination.BANK.route) {
-                BankScreen(container = container)
-            }
-            tabDestination(TopLevelDestination.STATS.route) {
-                StatsScreen(container = container)
-            }
-            tabDestination(TopLevelDestination.SETTINGS.route) {
-                SettingsScreen(
-                    container = container,
-                    onOpenBatches = { navController.navigate(ROUTE_BATCHES) },
-                )
-            }
-            composable(ROUTE_PRACTICE_SESSION) {
-                // 题目 ID 由发起页 savedStateHandle 传递，经 NavController.previousBackStackEntry 读取（官方模式）
-                val questionIds = navController.previousBackStackEntry
-                    ?.savedStateHandle?.get<List<String>>("questionIds").orEmpty()
-                val shuffleOptions = navController.previousBackStackEntry
-                    ?.savedStateHandle?.get<Boolean>("shuffleOptions") ?: true
-                PracticeSessionScreen(
-                    container = container,
-                    questionIds = questionIds,
-                    shuffleOptions = shuffleOptions,
-                    onExit = { navController.popBackStack() },
-                )
-            }
-            composable(ROUTE_BATCHES) {
-                BatchManageScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                )
-            }
+        }
+
+        if (showBottomBar) {
+            ZhilianBottomBar(
+                style = effectiveStyle,
+                destinations = TopLevelDestination.entries,
+                selectedRoute = selectedRoute,
+                onSelect = { destination ->
+                    navController.navigate(destination.route) {
+                        // 单一级栈：回到起点再切目的地，保存/恢复各页状态
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                backdrop = backdrop,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
