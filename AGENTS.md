@@ -23,7 +23,7 @@ python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检
 | `app/src/test/` | JVM 单测（判分、掌握度、填空匹配等） |
 | `docs/conventions/` | question-authoring.md（出题规范）、pitfalls.md（踩坑手册）、edge-to-edge.md、design-tokens.md |
 | `docs/schema/` | batch-v1.schema.json + batch-spec-v1.md（批次 JSON 权威契约） |
-| `docs/adr/` | 已定案决策记录（0001–0010） |
+| `docs/adr/` | 已定案决策记录（0001–0011） |
 | `tools/batch-check.py` | 批次预校验（Schema + 应用级规则 + 跨批次重复） |
 | `CONTEXT.md` | 领域词汇表（科目/分类/标签/题目的身份语义） |
 

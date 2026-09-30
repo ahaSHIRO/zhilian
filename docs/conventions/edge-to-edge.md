@@ -34,7 +34,7 @@
 ## 屏幕级约定
 
 - **一题一屏（练习页）**：整页外层 Column 用 `Modifier.imePadding()` + `windowInsetsPadding(WindowInsets.navigationBars)` 避让键盘与小白条；题卡内部滚动区另加 `windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))`，保证键盘与小白条两种状态下题干与选项都不被遮挡。提交按钮在题卡滚动区内（与题目同屏），不单独固定底部。
-- **列表屏（题库/错题）**：内容允许滚到状态栏底下制造沉浸感——给列表 `contentPadding = innerPadding`（而不是 padding 容器），滚动时内容穿过透明状态栏，静止首项仍可见。
+- **列表屏（题库）**：状态栏**不穿透**——外壳已对 NavHost 整体 `padding(top = innerPadding)`，各屏内容一律从状态栏下方开始；屏内只需正常滚动与底部留白。全 App 只有**底栏**是穿透层（见 §底栏穿透）。此前「列表内容滚到状态栏底下制造沉浸感」的表述与实现矛盾，已作废。
 - **解析半模态面板**（ADR-0007）：`ModalBottomSheet` 自带 safeDrawing 处理；面板内内容只需正常滚动，底部留足 padding 即可，不在 content 里再加 `navigationBarsPadding`。
 
 ## 深浅色与对比度

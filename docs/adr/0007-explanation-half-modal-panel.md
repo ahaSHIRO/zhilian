@@ -12,4 +12,6 @@ ADR-0003 当初废弃弹层的理由是「弹层会打断翻页节奏」。但�
 
 面板高度：默认全屏（Expanded，skipPartiallyExpanded=true）；无半屏档，下拉或点遮罩关闭。
 
-ADR-0003 的卡片流（HorizontalPager 左右滑切题、peek 露边、结尾卡、跳回未作答）全部保留，仅「解析展示形态」这一子决策被本 ADR 取代。ADR-0003 文件相应标注。面板内边距 token 规范见 [docs/conventions/design-tokens.md](../conventions/design-tokens.md) §2.3。
+ADR-0003 的卡片流（HorizontalPager 左右滑切题、结尾卡、跳回未作答）全部保留，仅「解析展示形态」这一子决策被本 ADR 取代。ADR-0003 文件相应标注。面板内边距 token 规范见 [docs/conventions/design-tokens.md](../conventions/design-tokens.md) §2.3。
+
+> **修订（2026-09-30）**：ADR-0003 的「peek 露边」已取消——练习页**一屏只呈现本题卡片**（见 ADR-0003 修订段）。本文第 15 段原文中的「peek 露边」列项随之作废；本 ADR 的解析面板形态不受影响。

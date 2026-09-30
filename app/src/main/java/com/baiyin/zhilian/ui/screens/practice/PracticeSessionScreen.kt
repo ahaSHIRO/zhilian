@@ -69,7 +69,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 练习会话：一题一卡的卡片流（ADR-0003）。
- * - HorizontalPager 左右滑动切题，peek 露边暗示；滑动纯导航，未提交可滑回修改
+ * - HorizontalPager 左右滑动切题，**一屏只有本题卡片**（不露相邻卡边缘，见下）；滑动纯导航，未提交可滑回修改
  * - 提交后就地高亮 + 反馈横幅留在卡内；解析走半模态面板，**双击已提交题卡**弹出（ADR-0007）
  * - 选项打乱：按 questionId 种子稳定打乱单选/多选行序（开关随会话参数带入）
  * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 会话得分 + 完成）
@@ -150,13 +150,15 @@ fun PracticeSessionScreen(
             .imePadding()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(vertical = ZhilianSpacing.sm),
+        // 进度区与卡片之间留气口：原先两者紧贴（实测约 0.3dp），进度条像是压在卡片上
+        verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.md),
     ) {
-        // 固定进度区（卡片外顶部）
         // 固定进度区（卡片外顶部）：只统计题目——结尾卡不是「第 N 题」，
-        // 故分母不含它（原先顶部写「第 1 / 21 题」而卡内写「第 1 / 20 题」，进度条也永远到不了 100%）
+        // 故分母不含它（原先顶部写「第 1 / 21 题」而卡内写「第 1 / 20 题」，进度条也永远到不了 100%）。
+        // 水平内边距与卡片外缘对齐（同为 lg），进度条与卡片左右边界成一条线
         val questionCount = questions.size.coerceAtLeast(1)
         val shownPage = (pagerState.currentPage + 1).coerceAtMost(questionCount)
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ZhilianSpacing.xl)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ZhilianSpacing.lg)) {
             Text(
                 stringResource(R.string.session_progress, shownPage, questionCount),
                 style = MaterialTheme.typography.labelLarge,
@@ -180,8 +182,12 @@ fun PracticeSessionScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = ZhilianSpacing.xl),
-            pageSpacing = ZhilianSpacing.lg,
+            // 一屏只有本题卡片：屏边距收一档（xl→lg），页间距**不小于**屏边距（lg→xl）——
+            // 相邻卡露出的宽度 = 屏边距 − 页间距，取等或取大即彻底移出屏幕。
+            // 露出相邻卡片原是为暗示「可滑」（ADR-0003），但本 App 是单人自用，
+            // 进过一次就知道能滑；而露边会挤掉代码行宽度、也让视线多两块干扰。
+            contentPadding = PaddingValues(horizontal = ZhilianSpacing.lg),
+            pageSpacing = ZhilianSpacing.xl,
         ) { page ->
             if (page == questions.size) {
                 // 结尾卡统计与会话得分口径见 CONTEXT.md「会话得分」/ [PracticeSession.summary]

@@ -54,7 +54,7 @@
 
 ### 2.4 例外与边界
 
-- **卡片流露出边（[ADR-0003](../adr/0003-practice-card-pager.md)，功能性，不纳入 token）**:练习页 `HorizontalPager` 的 `contentPadding = 24.dp` 属 peek 露边,用于暗示可滑,是功能值而非间距规范,保留 24 并在此单独标注,不强制改为 token。
+- **练习页卡片流的内边距不是例外,就是 `lg` / `xl`**（[ADR-0003](../adr/0003-practice-card-pager.md) 修订段,2026-09-30）:练习页**一屏只呈现本题卡片**。屏边距取 `lg`(16),页间距取 `xl`(24)——**页间距不小于屏边距**,相邻卡即彻底移出屏幕（实测:屏最右 8dp 内的相邻卡像素由 24 降为 0）。此前的「peek 露边 24dp、不纳入 token」例外条款随之作废。
 - **不纳入间距 token**:边框宽度(`1.dp`)、卡片阴影高度(`2dp`,ADR-0005 已定)、`elevation`——沿用 ADR-0005,不另设 token。
 - **窗口避让**:状态栏 / 小白条 / 输入法避让走 `WindowInsets`,不属间距 token,见 [edge-to-edge.md](./edge-to-edge.md)。
 
@@ -109,13 +109,13 @@
 - **Medium**:`title*` / `headline*` / `label*` 标签与标题。
 - **Bold(强调)**:仅用于三类场景——**统计数字**、**会话得分**、**错题标记**;在对应 typography 档上调用方覆写 `FontWeight.Bold`。全库 `FontWeight.Bold` 限定这三类,禁止散落。
 
-### 4.3 现状修正
+### 4.3 落地状态
 
-Theme.kt 现仅传 `colorScheme`,`typography` 缺失导致 57 处引用全回落 M3 默认（系统默认字体，即 FontFamily.Default）/ 默认字号 / 默认字重。落地后(见第五章)Theme.kt 传 `ZhilianTypography`,57 处引用零改动即落到本规范。
+`Theme.kt` 已传 `typography` / `shapes`（`ZhilianTypography` / `ZhilianShapes`），全库 `MaterialTheme.typography.*` 引用即落到本规范各档。此前「typography 缺失、57 处引用全回落 M3 默认」的表述已作废。
 
 ## 五、落地约定
 
-> 本章指导后续代码实现(由其他代理开发),本次只落文档不写代码。
+> 本章为**落地记录与取值依据**:三份 token 文件已存在并在用,本文档此后是这三类值的**取值权威**——代码与本文档不符时,改代码并同步本文档。
 
 ### 5.1 文件与暴露
 
@@ -203,15 +203,15 @@ MaterialTheme(
 
 ## 六、验收清单
 
-- [ ] 三维档位表完整(间距 5 档 + 4 语义别名 / 圆角 5 槽 / 字体 11 档)
-- [ ] 异值归并表覆盖 14 / 20 / 32 / 6
-- [ ] 字重三档对比明确,Bold 限定三类场景
-- [ ] 落地约定含 Type.kt / Shape.kt / Spacing.kt 骨架 + Theme.kt 传参 + 迁移顺序
-- [ ] 决策依据段记录 5 个「为何」
-- [ ] 卡片流 pager 24dp 功能露出边例外有单独说明
-- [ ] 不抄颜色、不进 CONTEXT.md、不单开 ADR
-- [ ] 纯文字 + 表格,无图
+- [x] 三维档位表完整(间距 5 档 + 4 语义别名 / 圆角 5 槽 / 字体 11 档)
+- [x] 异值归并表覆盖 14 / 20 / 32 / 6
+- [x] 字重三档对比明确,Bold 限定三类场景
+- [x] 落地约定含 Type.kt / Shape.kt / Spacing.kt 骨架 + Theme.kt 传参 + 迁移顺序
+- [x] 决策依据段记录 5 个「为何」
+- [x] 练习页卡片流的屏边距/页间距取值与「不露相邻卡」的关系有说明(ADR-0003 修订段)
+- [x] 不抄颜色、不进 CONTEXT.md、不单开 ADR
+- [x] 纯文字 + 表格,无图
 
 ---
 
-*本规范为后续 Type.kt / Shape.kt / Spacing.kt 代码实现的设计依据;代码由其他代理据第五章落地约定开发。*
+*本文档是间距 / 圆角 / 字体三类 token 的取值权威;代码改动若与本文档不符,以本文档为准并同步更新。*

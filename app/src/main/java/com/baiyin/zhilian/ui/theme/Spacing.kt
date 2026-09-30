@@ -7,7 +7,7 @@ import androidx.compose.ui.unit.dp
  *
  * 8 基准五档 + 少量语义别名（克制，只给高频复用点，避免每 dp 起名成浅封装）。
  * 调用方优先用语义别名表达意图（如 cardInner、screenEdge），需要灵活时用尺度档。
- * 卡片流 HorizontalPager 的 contentPadding 属功能露出边，不纳入本 token。
+ * 练习页卡片流的屏边距/页间距就是 lg / xl——页间距不小于屏边距即不露相邻卡（ADR-0003 修订段）。
  */
 object ZhilianSpacing {
     val xs = 4.dp
@@ -16,7 +16,7 @@ object ZhilianSpacing {
     val lg = 16.dp
     val xl = 24.dp
 
-    /** 屏级 Column 水平边距（默认）；卡片流页见 design-tokens.md §2.4 用 xl */
+    /** 屏级 Column 水平边距（默认）；练习页卡片流同用此档（ADR-0003 修订段） */
     val screenEdge get() = lg
 
     /** ZhilianCard 默认卡内边距 */
