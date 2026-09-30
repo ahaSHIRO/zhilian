@@ -14,6 +14,7 @@
 
 用法：
     python tools/batch-check.py <批次文件路径> [--batches-dir <已导入批次目录>]
+    # --batches-dir 缺省读环境变量 ZHILIAN_BATCHES_DIR，未设置回落当前目录（跨批次核对将跳过）
     python tools/batch-check.py --selftest      # 用共同夹具自检规则判定，不校验批次文件
 
 退出码：0 = 全部通过（可能有警告）；1 = 有错误。

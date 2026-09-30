@@ -13,7 +13,10 @@
 .\gradlew.bat test                   # 单测
 python tools\batch-check.py <批次.json>   # 批次 JSON 预校验
 python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检（与 App 端同夹具）
+python tools\bank-stats.py                # 题库存量盘面（科目/分类/题型/标签/程序题占比）
 ```
+
+两个 Python 工具从环境变量 `ZHILIAN_BATCHES_DIR` 读本机批次目录（维护者机器已配置）；未设置的机器须用 `--batches-dir` 显式传入，否则跨批次核对会静默跳过。**本仓库已公开在 GitHub——任何个人路径、凭据不得入库，本机配置一律走环境变量。**
 
 ## 目录地图
 
@@ -24,7 +27,7 @@ python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检
 | `docs/conventions/` | question-authoring.md（出题规范）、pitfalls.md（踩坑手册）、edge-to-edge.md、design-tokens.md |
 | `docs/schema/` | batch-v1.schema.json + batch-spec-v1.md（批次 JSON 权威契约） |
 | `docs/adr/` | 已定案决策记录（0001–0011） |
-| `tools/batch-check.py` | 批次预校验（Schema + 应用级规则 + 跨批次重复） |
+| `tools/` | batch-check.py 批次预校验（Schema + 应用级规则 + 跨批次重复 + 标签词表拦截）；bank-stats.py 存量盘面；vocab.py 词表解析（§八 为唯一权威源） |
 | `CONTEXT.md` | 领域词汇表（科目/分类/标签/题目的身份语义） |
 
 ## 按任务路由（先读再动）

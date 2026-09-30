@@ -8,6 +8,7 @@
 
 用法：
     python tools/bank-stats.py [--batches-dir <批次目录>]
+    # --batches-dir 缺省读环境变量 ZHILIAN_BATCHES_DIR，未设置回落当前目录
 
 退出码：0 = 正常出报告（词表外标签只在报告中标注，不改变退出码；
 词表拦截是 batch-check.py 的职责）。

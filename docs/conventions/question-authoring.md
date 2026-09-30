@@ -61,6 +61,8 @@ cd C:\Code\Android\知练
 python tools\batch-check.py <批次文件路径>
 ```
 
+> 批次目录由环境变量 `ZHILIAN_BATCHES_DIR` 指定（维护者机器已配置）；未设置的机器必须用 `--batches-dir` 显式传入，否则跨批次核对（清单 6/8）会静默跳过。
+
 App 对 Schema 不合格的批次是**整批拒绝**且只回报前 5 条错误——同步到手机才发现，就要走"回炉 → 重传 → 重导"一整圈。预校验脚本复用同一份 Schema，并额外检查 Schema 表达不了的应用级规则（见 §四）。
 
 ### 4. 冷复审
