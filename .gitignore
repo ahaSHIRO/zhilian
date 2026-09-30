@@ -11,3 +11,4 @@
 /.trae
 /.commandcode
 __pycache__/
+.kotlin/
