@@ -13,9 +13,9 @@
 
 | 区域 | 谁负责 | 做法 |
 |---|---|---|
-| 状态栏 | 各屏 Scaffold + 顶栏 | Scaffold 默认 `contentWindowInsets` 已含 `safeDrawing`；带 TopAppBar 的屏自动避让 |
+| 状态栏 | **外壳统一负责**（`ZhilianApp`） | 外壳 Scaffold 的默认 `contentWindowInsets`（M3 为 `systemBars` 系，非 `safeDrawing`）→ `innerPadding`，NavHost 只取 `padding(top = innerPadding.calculateTopPadding())`，**对全部路由含二级页生效**；各屏不写 `statusBarsPadding`（全仓也无 TopAppBar） |
 | 小白条 | **底栏自身**（悬浮胶囊） | `ZhilianBottomBar` 内部 `windowInsetsPadding(navigationBars ∪ ime)`，内容穿到它背后但不压在小白条上；见 §底栏穿透 |
-| 无底栏的屏 | 屏内容 | `Modifier.windowInsetsPadding(WindowInsets.safeDrawing)` 或 Scaffold `innerPadding` |
+| 无底栏的屏 | 屏内容（状态栏仍由外壳统一） | 按需 `windowInsetsPadding(WindowInsets.navigationBars)`（会话页）或 `navigationBars.asPaddingValues()` 参与 `LazyColumn.contentPadding`（批次管理页）；**不写 `statusBarsPadding`** |
 | 输入法 | 文本输入区 | 填空题输入处 `Modifier.imePadding()`；提交按钮贴 IME 上缘时用 `imePadding()` 而非 `navigationBarsPadding()` 叠加 |
 | 底部弹层 / 半模态面板 | ModalBottomSheet | 组件自身处理导航条 inset，不在 content 里再加 navigationBarsPadding |
 
