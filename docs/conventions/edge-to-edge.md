@@ -45,7 +45,7 @@
 
 ## 其他系统栏相关
 
-- 预测性返回：Manifest 中 `android:enableOnBackInvokedCallback="true"`，禁止自定义 `onBackPressed` 拦截（首版练习页退出确认用 Compose 内 `BackHandler` + 对话框实现）。
+- 预测性返回：**已停用**（Manifest `android:enableOnBackInvokedCallback="false"`，ADR-0009）。应用内二级页走经典水平侧滑（push 右进 / pop 右出、下层静止、无淡入淡出）；页面级不写返回拦截（会话页直退无确认框），需要消费返回的浮层（如 ModalBottomSheet）由组件内部处理。禁止再自定义 `onBackPressed`；若要重启预测性返回须先单开 ADR。
 - 挖孔屏：默认不特殊处理（`WindowInsets.safeDrawing` 已含 display cutout）。
 
 ## 验收清单

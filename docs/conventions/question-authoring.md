@@ -301,9 +301,23 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 暂无存量。首个 ArkTS 批次出题时，由出题代理按增量规则提议、维护者扩表建档。
 
-### 面试（subject: interview）
+### 面试（subject: interview，存量 v1，2026-09-29 自 batch-0009 建档）
 
-暂无存量。首建按 §九 面试科目规则：分类承载题源（基础面试题 / 常见面试题），标签承载知识域，由出题代理按增量规则提议、维护者扩表建档。
+分类「基础面试题」：
+
+| 分类 | 合法标签 |
+|---|---|
+| 基础面试题 | primitive-types、equality、keywords、boxing、string、data-structure、collections、gc、references、clone、oop、overload-override、abstract-interface、hashcode、design-patterns |
+
+> `equality`、`collections` 与 Kotlin 词表同名，经维护者裁定**跨科目同名复用**（标签筛选按 subject 隔离，不串味）。
+
+### 常见面试题（subject: interview，存量 v1，2026-09-29 自 batch-0010 建档）
+
+| 分类 | 合法标签 |
+|---|---|
+| 常见面试题 | collections（复用「基础面试题」）、serialization、hashmap、concurrency、thread-safety、lock、volatile、thread-pool |
+
+> `collections` 跨分类复用（B1-2 集合类层，与「基础面试题」的原理层共用同一容器标签，二者靠分类区分）；`hashmap` 与既有 `hashcode` 是不同身份（容器 vs equals/hashCode 契约），不合并、不造 `hash-map` 变体。
 
 ## 九、面试科目（interview）出题原则
 
