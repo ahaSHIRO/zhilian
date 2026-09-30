@@ -48,7 +48,7 @@ python tools\bank-stats.py                # 题库存量盘面（科目/分类/�
 3. **默认在模拟器验证，且模拟器固定为 MuMu**：
    - 连接命令 `adb connect 127.0.0.1:7555`；**设备列表里同时挂着真机与 AVD，后续所有 adb 命令必须带 `-s 127.0.0.1:7555`**，否则直接报 `more than one device`。
    - **不要另起 Android Studio AVD**：AVD（如 `Medium_Phone_API_36.1`）是 1080×2400@420dpi = **411dp** 宽，MuMu 是 1080×1920@480dpi = **360dp**，相差 14%。间距、折行、卡片宽度这类测量数只跟 dp 宽走，换机器整套数字不可比——**本项目历史验证数据一律以 360dp 为基准**。
-   - 环境事实：MuMu = Android 15 / API 35，`wm size` 1080x1920、`wm density` 480；真机 = 1280×2772@480dpi ≈ **427dp**（小米 25060RK16C，Android 17 / API 37）。真机比 MuMu 宽 18%，模拟器上看着折行的代码在真机上可能不折——**折行类结论必须在真机复核**。
+   - 环境事实：MuMu = Android 15 / API 35，`wm size` 1080x1920、`wm density` 480 → **360dp**；真机 = 小米 25060RK16C（Android 17 / API 37），`wm size` 1280x2772。**真机的 dp 宽度会随系统「显示大小」设置变化**——同一台机器实测到过 `wm density 480` ≈ 427dp 与 `wm density 520` ≈ 394dp 两种，所以**每次用前现场读 `wm size` / `wm density`，不要沿用旧数字**。模拟器上看着折行的代码在真机上可能不折——**折行类结论必须在真机复核**。
    - 除「模拟器复现不了」或用户明确要求真机外，不占用真机。确需真机时——自动化前确认手机空闲（`dumpsys activity activities` 查前台），**验证完立即息屏**（`adb shell input keyevent 26`，防 OLED 烧屏）。
 4. **构建成功 ≠ 验证通过**：真机验证前先 `adb install -r` 新 APK。
 5. **工具回执可能污染**：投放/删除等不可逆操作分步重验（存在性 → 列目录 → 双 hash 交叉核对），见 pitfalls 3.2。
