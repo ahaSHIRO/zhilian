@@ -28,6 +28,13 @@ class QuestionBank(private val db: ZhilianDatabase) {
     suspend fun get(ids: List<String>): List<QuestionEntity> =
         if (ids.isEmpty()) emptyList() else dao.getByIds(ids)
 
+    /**
+     * 单题流：题库详情面板按 id 订阅，而不是抱一份点击瞬间的快照。
+     * 抱快照会让面板里的收藏按钮永远读旧值——点了不换文案、再点还是写同一个目标值，
+     * 用户根本无法从面板里取消收藏。
+     */
+    fun observeQuestion(id: String): Flow<QuestionEntity?> = dao.observeById(id)
+
     /** 收藏开关（题库页） */
     suspend fun setFavorite(id: String, favorite: Boolean) = dao.setFavorite(id, favorite)
 }

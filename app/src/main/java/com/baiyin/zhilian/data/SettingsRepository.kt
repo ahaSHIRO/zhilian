@@ -24,32 +24,42 @@ class SettingsRepository(context: Context) {
 
     private val dataStore = context.applicationContext.dataStore
 
-    val themeMode: Flow<ThemeMode> = dataStore.data.map { prefs ->
+    /**
+     * 深色模式。[Read.Pending] 表示还没读到盘——消费点此时应跟系统渲染，而不是拿默认值冒充。
+     */
+    val themeMode: Flow<Read<ThemeMode>> = dataStore.data.map { prefs ->
         when (prefs[stringPreferencesKey(KEY_THEME_MODE)]) {
             ThemeMode.LIGHT.name -> ThemeMode.LIGHT
             ThemeMode.DARK.name -> ThemeMode.DARK
             else -> ThemeMode.FOLLOW_SYSTEM
         }
-    }
+    }.asRead()
 
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { it[stringPreferencesKey(KEY_THEME_MODE)] = mode.name }
     }
 
-    /** 底栏效果（ADR-0010）。默认液态玻璃；低版本设备由调用方降级为磨砂。 */
-    val bottomBarStyle: Flow<BottomBarStyle> = dataStore.data.map { prefs ->
+    /**
+     * 底栏效果（ADR-0010）。默认液态玻璃；低版本设备由调用方降级为磨砂。
+     * [Read.Pending] 时调用方应先用**最便宜**的标准档渲染，读到设置再切。
+     */
+    val bottomBarStyle: Flow<Read<BottomBarStyle>> = dataStore.data.map { prefs ->
         val stored = prefs[stringPreferencesKey(KEY_BOTTOM_BAR_STYLE)]
         BottomBarStyle.entries.firstOrNull { it.name == stored } ?: BottomBarStyle.LIQUID_GLASS
-    }
+    }.asRead()
 
     suspend fun setBottomBarStyle(style: BottomBarStyle) {
         dataStore.edit { it[stringPreferencesKey(KEY_BOTTOM_BAR_STYLE)] = style.name }
     }
 
-    /** Syncthing 批次目录（SAF tree URI），未授权时为 null */
-    val batchTreeUri: Flow<Uri?> = dataStore.data.map { prefs ->
+    /**
+     * Syncthing 批次目录（SAF tree URI）。
+     * [Read.Pending] = 还没读到设置；[Read.Value] 里的 null 才是「用户没授权过」。
+     * 两者混用会让批次页在首帧喊一句「尚未授权」再跳变。
+     */
+    val batchTreeUri: Flow<Read<Uri?>> = dataStore.data.map { prefs ->
         prefs[stringPreferencesKey(KEY_BATCH_TREE_URI)]?.let(Uri::parse)
-    }
+    }.asRead()
 
     suspend fun setBatchTreeUri(uri: Uri?) {
         dataStore.edit { prefs ->

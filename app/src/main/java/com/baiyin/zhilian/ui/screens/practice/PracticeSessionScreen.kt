@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -128,9 +129,16 @@ fun PracticeSessionScreen(
     // 解析面板属当前卡片的瞬时 UI 态，不进状态容器：换题/重建后回到无面板是合理行为
     var explanationFor by remember { mutableStateOf<Int?>(null) }
 
+    // 面板 state 提到这里：滑题时要先播收起动画再移除——ADR-0007 说的是「自动收起」，
+    // 原先直接置 null 是瞬移消失，与 300ms 的侧滑转场并排看很突兀
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     // 滑到别的题就收起面板：面板属于当前卡片，不跨题保留（ADR-0007）
     LaunchedEffect(pagerState.currentPage) {
-        explanationFor = null
+        if (explanationFor != null) {
+            sheetState.hide()
+            explanationFor = null
+        }
     }
 
     // 返回手势/按键不在此拦截：面板打开时由 ModalBottomSheet 原生预测返回（跟手下移关闭）
@@ -144,14 +152,18 @@ fun PracticeSessionScreen(
             .padding(vertical = ZhilianSpacing.sm),
     ) {
         // 固定进度区（卡片外顶部）
+        // 固定进度区（卡片外顶部）：只统计题目——结尾卡不是「第 N 题」，
+        // 故分母不含它（原先顶部写「第 1 / 21 题」而卡内写「第 1 / 20 题」，进度条也永远到不了 100%）
+        val questionCount = questions.size.coerceAtLeast(1)
+        val shownPage = (pagerState.currentPage + 1).coerceAtMost(questionCount)
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ZhilianSpacing.xl)) {
             Text(
-                stringResource(R.string.session_progress, (pagerState.currentPage + 1).coerceAtMost(pageCount), pageCount),
+                stringResource(R.string.session_progress, shownPage, questionCount),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             LinearProgressIndicator(
-                progress = { (pagerState.currentPage + 1f) / pageCount },
+                progress = { shownPage.toFloat() / questionCount },
                 modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.sm),
             )
             // 部分题已被停用：非阻断提示，避免用户以为题量随机缩水
@@ -227,7 +239,6 @@ fun PracticeSessionScreen(
         val result = state.submitted[question.questionId]
         // 双击打开默认全屏（skipPartiallyExpanded=true 跳过半屏档）；
         // 短解析也无半屏露白、专注解析。下拉或点遮罩关闭，滑到下一题自动收起。
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         LaunchedEffect(sheetPage) {
             sheetState.expand()
         }
@@ -388,6 +399,10 @@ private fun QuestionCard(
     val revealed = result != null
     val canSubmit = PracticeSession.canSubmit(question.type, userAnswer)
 
+    // 双击回调经 rememberUpdatedState 取最新值，pointerInput 的 key 固定为 Unit：
+    // 否则每次重组都会重建手势检测器，两次点按之间一旦重组，第一下就被丢掉（表现为「双击没反应」）
+    val doubleTapState = rememberUpdatedState(onDoubleTap)
+
     ZhilianCard(
         modifier = modifier
             .fillMaxSize()
@@ -395,8 +410,8 @@ private fun QuestionCard(
                 // 已提交后双击卡片任意位置（含选项）弹出解析；
                 // 提交后选项只读、不挂 selectable/toggleable，不消费点击，父级双击覆盖整卡
                 if (onDoubleTap != null) {
-                    Modifier.pointerInput(onDoubleTap) {
-                        detectTapGestures(onDoubleTap = { onDoubleTap() })
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(onDoubleTap = { doubleTapState.value?.invoke() })
                     }
                 } else {
                     Modifier

@@ -1,12 +1,12 @@
 package com.baiyin.zhilian.ui.screens.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,21 +15,20 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,29 +43,48 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
+import com.baiyin.zhilian.data.Read
+import com.baiyin.zhilian.data.batch.BatchDirectoryScan
 import com.baiyin.zhilian.data.batch.BatchFileDto
+import com.baiyin.zhilian.data.batch.BatchFileRef
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.ImportOutcome
+import com.baiyin.zhilian.data.batch.ScannedBatch
+import com.baiyin.zhilian.data.batch.ScanState
+import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 目录扫描结果：文件 + 预解析 DTO（解析中或非法批次为 null，由 [parsing] 区分） */
-private data class ScannedBatch(val file: DocumentFile, val dto: BatchFileDto?)
+/** 阶段 1：只列目录（SAF listFiles），拿到文件名就返回——不读文件内容 */
+private suspend fun listBatchFiles(context: Context, uri: Uri): List<BatchFileRef> =
+    withContext(Dispatchers.IO) {
+        DocumentFile.fromTreeUri(context, uri)
+            ?.listFiles()
+            ?.filter { it.isFile && it.name?.endsWith(".json") == true }
+            ?.sortedByDescending { it.name ?: "" }
+            ?.map { BatchFileRef(it.uri.toString(), it.name ?: "?") }
+            ?: emptyList()
+    }
 
-/** 按 batchOrder 倒序（解析失败的沉底），再按文件名倒序 */
-private val BATCH_ORDER: Comparator<ScannedBatch> =
-    compareByDescending<ScannedBatch> { it.dto?.batchOrder ?: Int.MIN_VALUE }
-        .thenByDescending { it.file.name ?: "" }
+/** 阶段 2：读 + 解析单个文件（SAF openInputStream 各自独立，故可并行） */
+private suspend fun parseBatch(context: Context, ref: BatchFileRef): BatchFileDto? =
+    withContext(Dispatchers.IO) {
+        context.contentResolver.openInputStream(Uri.parse(ref.key))
+            ?.bufferedReader()?.use { it.readText() }
+            ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
+    }
 
 /**
  * 批次管理：SAF 授权 Syncthing 批次目录 → 自动/手动扫描待处理批次 → 单个或全部导入 →
  * 结果报告；疑似重复逐条人工决策（README 导入韧性）。
  * 目录文件与已处理批次均按 batchOrder 倒序（最新批次在最上）。
+ *
+ * 扫描的规则与竞态全在 [BatchDirectoryScan]：本页只把 SAF 读盘与导入动作接上去，
+ * 并按 [ScanState] 渲染——首帧不渲染任何列表 section（含 Room 的已处理批次），
+ * 避免「快数据先占位、慢数据后插入」的跳动（pitfalls 2.13）。
  */
 @Composable
 fun BatchManageScreen(
@@ -77,14 +95,14 @@ fun BatchManageScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val treeUri by container.settingsRepository.batchTreeUri
-        .collectAsStateWithLifecycle(initialValue = null)
+    val treeUriRead by container.settingsRepository.batchTreeUri
+        .collectAsStateWithLifecycle(initialValue = Read.Pending)
+    val treeUri = treeUriRead.valueOrNull
     val processedBatches by container.importService.observeProcessedBatches()
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val pendingDuplicates by container.importService.observePendingDuplicates()
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
-    var batches by remember { mutableStateOf<List<ScannedBatch>>(emptyList()) }
     var importOutcome by remember { mutableStateOf<ImportOutcome?>(null) }
     var resolving by remember { mutableStateOf<com.baiyin.zhilian.data.db.PendingDuplicateEntity?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -104,63 +122,39 @@ fun BatchManageScreen(
         }
     }
 
-    // 阶段 1：只列目录（SAF listFiles），拿到文件名就返回——不读文件内容
-    suspend fun listBatchFiles(uri: Uri): List<DocumentFile> = withContext(Dispatchers.IO) {
-        DocumentFile.fromTreeUri(context, uri)
-            ?.listFiles()
-            ?.filter { it.isFile && it.name?.endsWith(".json") == true }
-            ?.sortedByDescending { it.name ?: "" }
-            ?: emptyList()
-    }
-
-    // 阶段 2：并行读+解析每个文件的 DTO，再按 batchOrder 倒序；SAF openInputStream 各自独立可并行
-    suspend fun parseBatches(files: List<DocumentFile>): List<ScannedBatch> = coroutineScope {
-        files.map { f ->
-            async(Dispatchers.IO) {
-                val dto = runCatching {
-                    context.contentResolver.openInputStream(f.uri)
-                        ?.bufferedReader()?.use { it.readText() }
-                        ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
-                }.getOrNull()
-                ScannedBatch(f, dto)
-            }
-        }.map { it.await() }.sortedWith(BATCH_ORDER)
-    }
-
-    // initialized：首次目录扫描是否完成。未完成前只渲染操作行+转圈，
-    // 不渲染目录/已处理等任何列表 section——否则 Room 的已处理记录先到、SAF 目录
-    // 后到时，目录区会在转场途中「插入顶部」造成几帧跳动（闪烁根因）。
-    // parsing：文件名骨架已上屏、DTO 并行解析中（仅影响卡片副标题文案）。
-    var initialized by remember { mutableStateOf(false) }
-    var parsing by remember { mutableStateOf(false) }
-
-    suspend fun refresh(uri: Uri) {
-        val files = listBatchFiles(uri)
-        // 文件名骨架先上屏（DTO 全 null，按文件名降序，与 batchOrder 前缀一致不会跳动）；
-        // 骨架就绪即解除首帧门控，完整列表一次性出现。
-        batches = files.map { ScannedBatch(it, null) }
-        initialized = true
-        parsing = true
-        batches = parseBatches(files)
-        parsing = false
-    }
-
-    // 每次回到页面（含选完目录返回、Syncthing 同步后切回）自动重扫。
-    // 两阶段上屏：listFiles 返回后立刻用文件名渲染骨架（消除「整页空白等加载」），
-    // DTO 并行解析完再补顺序号/题数与排序。已初始化后的重扫静默进行（布局不跳）。
-    DisposableEffect(lifecycleOwner, treeUri) {
-        val uri = treeUri
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && uri != null) {
-                scope.launch { refresh(uri) }
-            }
+    // 换目录即换数据源：重建扫描器（从 Idle 重新走一次首扫，含骨架），旧扫描取消
+    val scan = remember(treeUri) {
+        treeUri?.let { uri ->
+            BatchDirectoryScan(
+                listFiles = { listBatchFiles(context, uri) },
+                parse = { ref -> parseBatch(context, ref) },
+                scope = scope,
+            )
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        if (uri != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            scope.launch { refresh(uri) }
-        }
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    DisposableEffect(scan) {
+        onDispose { scan?.reset() }
+    }
+
+    val scanState: ScanState = if (scan != null) {
+        val current by scan.state.collectAsStateWithLifecycle(initialValue = ScanState.Idle)
+        // 回到页面即重扫（ADR-0008）。注册观察者时 Lifecycle 会把新观察者推到当前状态并派发
+        // ON_RESUME——换目录后重建的扫描器正是靠这条启动，故**不再**另写「若已 RESUMED 则再扫
+        // 一次」的分支：那会与补发的事件叠加，让首次进入并发扫描两遍。
+        DisposableEffect(lifecycleOwner, scan) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) scan.start()
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        current
+    } else {
+        ScanState.Idle
+    }
+
+    val skeleton = (scanState as? ScanState.FirstScan)?.files.orEmpty()
+    val batches = (scanState as? ScanState.Ready)?.batches.orEmpty()
 
     fun isImported(sb: ScannedBatch): Boolean {
         val p = sb.dto ?: return false
@@ -185,7 +179,7 @@ fun BatchManageScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
     ) {
-        // 顶部操作行
+        // 顶部操作行（静态框架，任何状态下都在）
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
@@ -195,7 +189,8 @@ fun BatchManageScreen(
             }
         }
 
-        if (treeUri == null) {
+        // 设置读到、且确实没授权过，才说「尚未授权」——Pending 期间什么都不说
+        if (treeUriRead is Read.Value && treeUri == null) {
             item {
                 Text(
                     stringResource(R.string.batch_no_dir),
@@ -205,49 +200,51 @@ fun BatchManageScreen(
             }
         }
 
-        // 首次扫描未完成：只给一个转圈，其余 section 一律不渲染（避免内容分批到达导致跳动）
-        if (treeUri != null && !initialized) {
+        // 目录不可读（授权被撤 / 目录被删）：与「尚未授权」分开——这个要用户重新选择
+        if (scanState is ScanState.Unreadable) {
             item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.xl * 2),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(ZhilianSpacing.xl * 2))
-                }
+                Text(
+                    stringResource(R.string.batch_dir_unreadable, scanState.reason),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
 
-        if (initialized) {
-        // 待决疑似重复
-        if (pendingDuplicates.isNotEmpty()) {
-            item {
-                Text(stringResource(R.string.batch_pending_duplicates), style = MaterialTheme.typography.titleMedium)
-            }
-            items(pendingDuplicates, key = { "${it.batchId}/${it.questionId}" }) { item ->
-                ZhilianCard {
-                    Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
-                        Text(
-                            stringResource(R.string.batch_duplicate_with, item.existingQuestionId.take(8)),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Text(
-                            remember(item.questionJson) { stemPreview(item.questionJson) },
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
-                            TextButton(onClick = { resolving = item }) {
-                                Text(stringResource(R.string.batch_review_duplicate))
+        // 首帧门控：扫描产出之前不渲染任何 section——Room 的已处理记录到得快，
+        // 若让它先占位，扫描结果一到就会把整块内容顶下去（pitfalls 2.13）
+        val scanned = scanState is ScanState.FirstScan || scanState is ScanState.Ready
+
+        if (scanned) {
+            // 待决疑似重复
+            if (pendingDuplicates.isNotEmpty()) {
+                item {
+                    Text(stringResource(R.string.batch_pending_duplicates), style = MaterialTheme.typography.titleMedium)
+                }
+                items(pendingDuplicates, key = { "${it.batchId}/${it.questionId}" }) { item ->
+                    ZhilianCard {
+                        Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+                            Text(
+                                stringResource(R.string.batch_duplicate_with, item.existingQuestionId.take(8)),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                remember(item.questionJson) { stemPreview(item.questionJson) },
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                                TextButton(onClick = { resolving = item }) {
+                                    Text(stringResource(R.string.batch_review_duplicate))
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // 目录中的批次文件
-        if (batches.isNotEmpty()) {
+            // 目录中的批次文件：表头常驻，首次扫描期间先上文件名骨架
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -256,7 +253,7 @@ fun BatchManageScreen(
                 ) {
                     Text(stringResource(R.string.batch_dir_files), style = MaterialTheme.typography.titleMedium)
                     FilledTonalButton(
-                        enabled = !busy && !importingAll,
+                        enabled = !busy && !importingAll && batches.any { it.dto != null && !isImported(it) },
                         onClick = {
                             scope.launch {
                                 importingAll = true
@@ -264,9 +261,9 @@ fun BatchManageScreen(
                                 batches.forEach { sb ->
                                     if (sb.dto != null && !isImported(sb)) {
                                         val outcome = container.importService.importFromUri(
-                                            sb.file.uri, sb.file.name ?: "batch.json",
+                                            Uri.parse(sb.file.key), sb.file.name,
                                         )
-                                        results += (sb.file.name ?: "batch.json") to outcome
+                                        results += sb.file.name to outcome
                                     }
                                 }
                                 importingAll = false
@@ -280,7 +277,31 @@ fun BatchManageScreen(
                     }
                 }
             }
-            items(batches, key = { it.file.uri.toString() }) { sb ->
+
+            // 骨架：文件名已就绪、DTO 仍在并行解析；此时不给可用的导入按钮
+            items(skeleton, key = { it.key }) { ref ->
+                ZhilianCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(ZhilianSpacing.cardInnerCompact),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(ref.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                stringResource(R.string.batch_preview_loading),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(enabled = false, onClick = {}) {
+                            Text(stringResource(R.string.batch_import_action))
+                        }
+                    }
+                }
+            }
+
+            items(batches, key = { it.file.key }) { sb ->
                 val preview = sb.dto
                 val processed = isImported(sb)
                 ZhilianCard(
@@ -293,15 +314,15 @@ fun BatchManageScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(sb.file.name ?: "?", style = MaterialTheme.typography.bodyMedium)
-                            // DTO 解析中显示「加载中」，解析完仍为 null 才是「无法解析」
-                            val subText = when {
-                                preview != null -> stringResource(
+                            Text(sb.file.name, style = MaterialTheme.typography.bodyMedium)
+                            // 解析完仍为 null 才是「无法解析」
+                            val subText = if (preview != null) {
+                                stringResource(
                                     R.string.batch_preview_line,
                                     preview.batchOrder, preview.questions.size, preview.retiredQuestionIds.size,
                                 )
-                                parsing -> stringResource(R.string.batch_preview_loading)
-                                else -> stringResource(R.string.batch_preview_fail)
+                            } else {
+                                stringResource(R.string.batch_preview_fail)
                             }
                             Text(
                                 subText,
@@ -315,7 +336,7 @@ fun BatchManageScreen(
                                 scope.launch {
                                     busy = true
                                     importOutcome = container.importService.importFromUri(
-                                        sb.file.uri, sb.file.name ?: "batch.json",
+                                        Uri.parse(sb.file.key), sb.file.name,
                                     )
                                     busy = false
                                 }
@@ -326,42 +347,41 @@ fun BatchManageScreen(
                     }
                 }
             }
-        }
 
-        item { HorizontalDivider(modifier = Modifier.padding(vertical = ZhilianSpacing.xs)) }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = ZhilianSpacing.xs)) }
 
-        // 已处理批次（DAO 已按 batch_order DESC 返回）
-        item {
-            Text(stringResource(R.string.batch_processed_title), style = MaterialTheme.typography.titleMedium)
-        }
-        if (processedBatches.isEmpty()) {
+            // 已处理批次（DAO 已按 batch_order DESC 返回）
             item {
-                Text(
-                    stringResource(R.string.batch_processed_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(stringResource(R.string.batch_processed_title), style = MaterialTheme.typography.titleMedium)
             }
-        }
-        items(processedBatches, key = { it.batchId }) { b ->
-            ZhilianCard {
-                Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+            if (processedBatches.isEmpty()) {
+                item {
                     Text(
-                        stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        stringResource(
-                            R.string.batch_processed_counts,
-                            b.importedCount, b.skippedCount, b.failedCount, b.pendingDuplicateCount,
-                        ),
+                        stringResource(R.string.batch_processed_empty),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
+            items(processedBatches, key = { it.batchId }) { b ->
+                ZhilianCard {
+                    Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+                        Text(
+                            stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            stringResource(
+                                R.string.batch_processed_counts,
+                                b.importedCount, b.skippedCount, b.failedCount, b.pendingDuplicateCount,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
-        } // if (initialized)
     }
 
     // 单批导入结果报告
@@ -452,9 +472,11 @@ fun BatchManageScreen(
                                         R.string.batch_result_counts,
                                         outcome.importedCount, outcome.skippedCount,
                                         outcome.failedCount, outcome.retiredCount,
-                                    ) + if (outcome.duplicates.isNotEmpty())
+                                    ) + if (outcome.duplicates.isNotEmpty()) {
                                         " " + stringResource(R.string.batch_result_duplicates, outcome.duplicates.size)
-                                    else ""
+                                    } else {
+                                        ""
+                                    }
                                 is ImportOutcome.Failed -> outcome.reason.lineSequence().firstOrNull() ?: "失败"
                             }
                             Text(
@@ -486,7 +508,7 @@ private fun DuplicateResolveDialog(
 ) {
     val scope = rememberCoroutineScope()
     val candidateStem = remember(item.questionJson) { stemPreview(item.questionJson) }
-    val existingStem by androidx.compose.runtime.produceState<String?>(initialValue = null, item.existingQuestionId) {
+    val existingStem by produceState<String?>(initialValue = null, item.existingQuestionId) {
         value = container.questionBank.get(listOf(item.existingQuestionId))
             .firstOrNull()?.stem?.lineSequence()
             ?.firstOrNull { it.isNotBlank() }
@@ -507,7 +529,10 @@ private fun DuplicateResolveDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(existingStem ?: "…", maxLines = 4, style = MaterialTheme.typography.bodyMedium)
+                // 首帧门控：题干未取回前不渲染占位符号（原先会先闪一个「…」）
+                existingStem?.let { stem ->
+                    Text(stem, maxLines = 4, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         },
         confirmButton = {

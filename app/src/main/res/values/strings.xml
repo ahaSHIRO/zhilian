@@ -113,6 +113,8 @@
     <string name="batch_pick_dir">选择批次目录</string>
     <string name="batch_change_dir">更换目录</string>
     <string name="batch_no_dir">尚未授权批次目录。请选择 Syncthing 同步的批次文件夹。</string>
+    <!-- 与「尚未授权」区分：授权被撤或目录被删，要用户重新选择 -->
+    <string name="batch_dir_unreadable">批次目录不可读（%1$s）。请重新选择目录。</string>
     <string name="batch_dir_files">目录中的批次文件</string>
     <string name="batch_preview_line">顺序号 %1$d · 新题 %2$d · 停用 %3$d</string>
     <string name="batch_preview_fail">无法解析（不是合法批次）</string>

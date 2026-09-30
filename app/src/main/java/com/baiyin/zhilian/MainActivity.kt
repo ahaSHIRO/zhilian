@@ -6,7 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.baiyin.zhilian.data.Read
 import com.baiyin.zhilian.data.ThemeMode
+import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.navigation.ZhilianApp
 import com.baiyin.zhilian.ui.theme.ZhilianTheme
 
@@ -24,8 +26,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val themeMode by container.settingsRepository.themeMode
-                .collectAsStateWithLifecycle(initialValue = ThemeMode.FOLLOW_SYSTEM)
-            ZhilianTheme(themeMode = themeMode) {
+                .collectAsStateWithLifecycle(initialValue = Read.Pending)
+            // 设置未读到（DataStore 首读是异步的）时按系统态渲染：至少方向是对的，
+            // 不拿默认值冒充用户的选择
+            ZhilianTheme(themeMode = themeMode.valueOrNull ?: ThemeMode.FOLLOW_SYSTEM) {
                 ZhilianApp(container = container)
             }
         }

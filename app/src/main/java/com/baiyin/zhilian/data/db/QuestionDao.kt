@@ -55,6 +55,10 @@ interface QuestionDao {
     @Query("SELECT * FROM questions WHERE question_id = :id")
     suspend fun getById(id: String): QuestionEntity?
 
+    /** 单题流（题库详情面板按 id 订阅，写操作后立即反映最新值） */
+    @Query("SELECT * FROM questions WHERE question_id = :id")
+    fun observeById(id: String): Flow<QuestionEntity?>
+
     @Query("SELECT * FROM questions WHERE question_id IN (:ids) ORDER BY batch_order, order_in_batch")
     suspend fun getByIds(ids: List<String>): List<QuestionEntity>
 

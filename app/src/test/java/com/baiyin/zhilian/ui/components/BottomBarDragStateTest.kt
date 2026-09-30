@@ -124,4 +124,21 @@ class BottomBarDragStateTest {
         assertFalse(state.isDragging)
         assertTrue(state.releasePress())
     }
+
+    @Test
+    fun `起拖会取消在途的松手动画`() {
+        val state = newState(tabCount = 4, initialIndex = 0)
+
+        state.beginDrag()
+        state.drag(2f)
+        state.settle { }
+        assertTrue("松手后应进入吸附", state.isSettling)
+
+        state.beginDrag()
+
+        assertFalse(
+            "起拖不取消在途吸附的话，旧回调会在动画结束时再切一次 tab",
+            state.isSettling,
+        )
+    }
 }

@@ -32,7 +32,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.data.BottomBarStyle
+import com.baiyin.zhilian.data.Read
 import com.baiyin.zhilian.data.practice.SessionArgs
+import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianBottomBar
 import com.baiyin.zhilian.ui.components.resolveBottomBarStyle
 import com.baiyin.zhilian.ui.screens.bank.BankScreen
@@ -144,9 +146,14 @@ fun ZhilianApp(
     }
 
     val style by container.settingsRepository.bottomBarStyle
-        .collectAsStateWithLifecycle(initialValue = BottomBarStyle.LIQUID_GLASS)
-    // 低版本设备静默退到磨砂：纯函数解析，便于单测（ADR-0010）
-    val effectiveStyle = resolveBottomBarStyle(style, android.os.Build.VERSION.SDK_INT)
+        .collectAsStateWithLifecycle(initialValue = Read.Pending)
+    // 低版本设备静默退到磨砂：纯函数解析，便于单测（ADR-0010）。
+    // 设置未读到时先按**最便宜**的标准档渲染（读盘是异步的，不能让默认的液态玻璃
+    // 在低端机上白付一帧），读到再切到用户的选择
+    val effectiveStyle = resolveBottomBarStyle(
+        style.valueOrNull ?: BottomBarStyle.STANDARD,
+        android.os.Build.VERSION.SDK_INT,
+    )
 
     val dark = LocalZhilianDarkTheme.current
     val backdrop = rememberLayerBackdrop {

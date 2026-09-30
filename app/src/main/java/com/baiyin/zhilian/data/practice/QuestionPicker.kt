@@ -1,0 +1,142 @@
+package com.baiyin.zhilian.data.practice
+
+import androidx.sqlite.db.SimpleSQLiteQuery
+import com.baiyin.zhilian.data.db.QuestionDao
+import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.db.QuestionTagRow
+
+/**
+ * 错题判定（CONTEXT.md「错题」：有错史且未被连续两次全对消解）。
+ * 选题条件与统计弱项共用这**一处**片段，勿两处漂移。
+ */
+internal const val SQL_WRONG = "has_ever_wrong = 1 AND consecutive_perfect < 2"
+
+/**
+ * 选题条件的 SQL 拼装：纯函数，故「条件对不对」不必插设备就能问。
+ *
+ * 以前这些字符串散在仓里与调用点之间，同名条件出现多份，标签路径漏排序就是这么来的。
+ */
+internal object PracticeSql {
+
+    /** SQL 字符串常量转义（值来自本机题库 DISTINCT，常量级注入面） */
+    fun quote(values: Set<String>): String =
+        values.joinToString(",") { "'" + it.replace("'", "''") + "'" }
+
+    /** WHERE 子句：维度间取交集（AND），维度内多选取并集（IN） */
+    fun where(filter: PracticeFilter): String = buildList {
+        add("inactive = 0")
+        if (filter.subjects.isNotEmpty()) add("subject IN (${quote(filter.subjects)})")
+        if (filter.categories.isNotEmpty()) add("category IN (${quote(filter.categories)})")
+        if (filter.types.isNotEmpty()) add("type IN (${quote(filter.types)})")
+        if (filter.onlyWrong) add(SQL_WRONG)
+        if (filter.onlyFavorite) add("favorite = 1")
+    }.joinToString(" AND ")
+
+    fun orderBy(sequential: Boolean): String =
+        if (sequential) "batch_order, order_in_batch" else "RANDOM()"
+}
+
+/**
+ * 选题（C7）：把「出哪些题」的四个入口收成一处——选题 / 总数 / 错题数 / 收藏数，
+ * 外加配置页需要的可选值列表（科目 / 分类 / 标签 / 题型）。
+ *
+ * 四条投影共用同一份 WHERE 与同一份排序，标签路径也不例外：
+ * **标签的 SQL 必须自带 ORDER BY**——标签存在 JSON 数组列里、判定只能在内存做，
+ * 取投影时若漏掉排序，拿到的是行存储顺序，「顺序练习」会退化成「按导入先后刷」。
+ */
+class QuestionPicker(private val questionDao: QuestionDao) {
+
+    suspend fun pick(filter: PracticeFilter): List<QuestionEntity> {
+        // 未选标签时走 SQL 直接 LIMIT，不为低频路径付出全表扫描的代价
+        if (filter.tags.isEmpty()) {
+            val sql = "SELECT * FROM questions WHERE ${PracticeSql.where(filter)} " +
+                "ORDER BY ${PracticeSql.orderBy(filter.sequential)} LIMIT ${filter.limit}"
+            return questionDao.rawForPractice(SimpleSQLiteQuery(sql))
+        }
+        val picked = tagRows(filter).filter { QuestionTags.matches(it.tagsJson, filter.tags) }
+        val ids = (if (filter.sequential) picked else picked.shuffled())
+            .take(filter.limit).map { it.questionId }
+        // getByIds 按批次序返回，随机模式下须按打乱后的顺序重排，否则一律退化为顺序
+        val byId = questionDao.getByIds(ids).associateBy { it.questionId }
+        return ids.mapNotNull { byId[it] }
+    }
+
+    /** 符合条件的题目总数（不受 limit 截断；练习配置页预览用） */
+    suspend fun countMatching(filter: PracticeFilter): Int =
+        if (filter.tags.isEmpty()) {
+            questionDao.countRaw(
+                SimpleSQLiteQuery("SELECT COUNT(*) FROM questions WHERE ${PracticeSql.where(filter)}")
+            )
+        } else {
+            tagRows(filter).count { QuestionTags.matches(it.tagsJson, filter.tags) }
+        }
+
+    /**
+     * 范围 chip 上的预判计数：假设只打开该范围、其余条件不变时能刷出几道。
+     * 让「错题」从盲开关变成可判断的入口——否则只能勾上之后看总数才知道值不值得刷。
+     */
+    suspend fun wrongCount(filter: PracticeFilter): Int =
+        countMatching(filter.copy(onlyWrong = true))
+
+    suspend fun favoriteCount(filter: PracticeFilter): Int =
+        countMatching(filter.copy(onlyFavorite = true))
+
+    /** 题库中已有的科目（练习配置页科目 chips） */
+    suspend fun subjects(): List<String> =
+        questionDao.rawForStrings(SimpleSQLiteQuery(
+            "SELECT DISTINCT subject FROM questions WHERE inactive = 0 ORDER BY subject"
+        ))
+
+    /**
+     * 给定科目下已有的分类（科目为 null 时返回全部）。
+     * 分类挂在科目下，故按科目取，避免 Java 与 Kotlin 的同名分类混在一起。
+     */
+    suspend fun categories(subject: String?): List<String> {
+        val where = if (subject == null) {
+            "inactive = 0"
+        } else {
+            "inactive = 0 AND subject = '${subject.replace("'", "''")}'"
+        }
+        return questionDao.rawForStrings(SimpleSQLiteQuery(
+            "SELECT DISTINCT category FROM questions WHERE $where ORDER BY category"
+        ))
+    }
+
+    /**
+     * 给定科目与分类下已有的标签，二者任一为空表示不限该层。
+     *
+     * 标签比分类更细（同一科目的分类下常有 launch / async / mutex 等多个主题），
+     * 但存在 JSON 数组列里，取 DISTINCT 必须逐行解析；题库为个人规模，全表扫描可接受。
+     *
+     * 分类这一层不是多余的过滤：全库标签基数远高于分类（18 道题已产出 20+ 个标签），
+     * 不按分类收窄就会把配置页撑成两屏。先选分类、再用标签细筛，才是标签该出现的地方。
+     */
+    suspend fun tags(subject: String?, categories: Set<String>): List<String> {
+        val conditions = mutableListOf("inactive = 0")
+        if (subject != null) conditions += "subject = '${subject.replace("'", "''")}'"
+        if (categories.isNotEmpty()) conditions += "category IN (${PracticeSql.quote(categories)})"
+        return questionDao.rawForStrings(SimpleSQLiteQuery(
+            "SELECT tags_json FROM questions WHERE ${conditions.joinToString(" AND ")}"
+        )).let { QuestionTags.distinct(it) }
+    }
+
+    /** 题库中已有的题型（按固定顺序返回，便于 UI 稳定排布） */
+    suspend fun types(): List<String> {
+        val existing = questionDao.rawForStrings(SimpleSQLiteQuery(
+            "SELECT DISTINCT type FROM questions WHERE inactive = 0"
+        )).toSet()
+        // 固定顺序，UI 不因题库变化而重排
+        return listOf("single_choice", "multiple_choice", "true_false", "fill_in_blank")
+            .filter { it in existing }
+    }
+
+    /**
+     * 标签筛选的两列投影（SQL 条件不含标签，标签在内存里判；判定见 [QuestionTags]）。
+     * ORDER BY 必须在这里给出：内存筛选取的是这个投影的**顺序**。
+     */
+    private suspend fun tagRows(filter: PracticeFilter): List<QuestionTagRow> =
+        questionDao.rawForTagRows(SimpleSQLiteQuery(
+            "SELECT question_id, tags_json FROM questions WHERE ${PracticeSql.where(filter)} " +
+                "ORDER BY batch_order, order_in_batch"
+        ))
+}

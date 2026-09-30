@@ -21,7 +21,7 @@ class PracticeSessionLoader(
      * 两条契约：
      * 1. **按请求顺序返回**。题库查询按批次顺序返回，而「顺序/随机」的选择结果编码在
      *    [questionIds] 的顺序里；不重排就会让随机练习退化成顺序
-     *    （同型修复见 [PracticeRepository.pickQuestions] 的标签分支）。
+     *    （同型修复见 [QuestionPicker.pick] 的标签分支）。
      * 2. **只取未停用的题**，且只在载入这一刻判定：会话进行中若某题被新批次停用，
      *    不把它从用户眼前抽走，下次进入会话自然就不再出现。
      */

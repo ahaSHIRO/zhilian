@@ -39,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeSelection
+import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.rememberBottomBarContentPadding
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
@@ -60,6 +61,9 @@ private const val LIMIT_STEP = 5
  */
 private const val SAVE_SEP = "\u0001"
 
+/** 存档字段数：字段增减后旧存档会按下标越界，故恢复前先校验长度（回落到默认值） */
+private const val SELECTION_FIELDS = 8
+
 private val PracticeSelectionSaver = listSaver<PracticeSelection, String>(
     save = {
         listOf(
@@ -74,18 +78,22 @@ private val PracticeSelectionSaver = listSaver<PracticeSelection, String>(
         )
     },
     restore = { parts ->
-        fun setAt(index: Int): Set<String> =
-            parts[index].split(SAVE_SEP).filter { it.isNotEmpty() }.toSet()
-        PracticeSelection(
-            subjects = setAt(0),
-            categories = setAt(1),
-            tags = setAt(2),
-            types = setAt(3),
-            onlyWrong = parts[4].toBoolean(),
-            onlyFavorite = parts[5].toBoolean(),
-            sequential = parts[6].toBoolean(),
-            limit = parts[7].toInt(),
-        )
+        if (parts.size != SELECTION_FIELDS) {
+            null // 长度不符 = 旧版本存档：回默认值，而不是崩在恢复里
+        } else {
+            fun setAt(index: Int): Set<String> =
+                parts[index].split(SAVE_SEP).filter { it.isNotEmpty() }.toSet()
+            PracticeSelection(
+                subjects = setAt(0),
+                categories = setAt(1),
+                tags = setAt(2),
+                types = setAt(3),
+                onlyWrong = parts[4].toBoolean(),
+                onlyFavorite = parts[5].toBoolean(),
+                sequential = parts[6].toBoolean(),
+                limit = parts[7].toIntOrNull() ?: PracticeSelection.DEFAULT_LIMIT,
+            )
+        }
     },
 )
 
@@ -116,27 +124,37 @@ fun PracticeHomeScreen(
     var showLimitSheet by rememberSaveable { mutableStateOf(false) }
     var limitDraft by rememberSaveable { mutableStateOf(PracticeSelection.DEFAULT_LIMIT) }
 
+    // 科目与题型是首屏门控（C3）：取回前不渲染任何 chips、计数与终态文案——
+    // 原先首帧必然出现「题库为空」+「符合条件的题目：0 道」，随后内容分四批长出来。
+    // 分类/标签/计数随选择变化重算，属于「已就绪后的更新」，不参与门控。
+    var catalog by remember { mutableStateOf<Loadable<Pair<List<String>, List<String>>>>(Loadable.FirstLoad) }
+
     // 可选值列表与计数都是 DB 派生值，回来时由 LaunchedEffect 重算，不值得存
-    var subjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var categories by remember { mutableStateOf<List<String>>(emptyList()) }
     var tags by remember { mutableStateOf<List<String>>(emptyList()) }
-    var types by remember { mutableStateOf<List<String>>(emptyList()) }
     var matchedCount by remember { mutableStateOf(0) }
     var wrongCount by remember { mutableStateOf(0) }
     var favoriteCount by remember { mutableStateOf(0) }
-    var draftMatchedCount by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     // 科目与题型列表只随题库变化，取一次即可
     LaunchedEffect(Unit) {
-        subjects = container.practiceRepository.distinctSubjects()
-        types = container.practiceRepository.distinctTypes()
+        catalog = Loadable.Data(
+            container.questionPicker.subjects() to container.questionPicker.types(),
+        )
     }
+
+    val catalogData = (catalog as? Loadable.Data)?.value
+
+    /** 首帧门控：未就绪时整张筛选卡只渲染静态框架（标题与分组名） */
+    val ready = catalogData != null
+    val subjects = catalogData?.first.orEmpty()
+    val types = catalogData?.second.orEmpty()
 
     // 分类跟随所选科目：单选科目时显示该科目的分类；未选或多选时显示全部（多选场景下并集更实用）。
     // 科目变化后收窄已有选择，避免出现选中了但看不到的 chip。
     LaunchedEffect(selection.subjects) {
-        val available = container.practiceRepository.distinctCategories(selection.onlySubject)
+        val available = container.questionPicker.categories(selection.onlySubject)
         categories = available
         selection = selection.withCategories(available)
     }
@@ -146,7 +164,7 @@ fun PracticeHomeScreen(
         val fetched = if (selection.categories.isEmpty()) {
             emptyList()
         } else {
-            container.practiceRepository.distinctTags(selection.onlySubject, selection.categories)
+            container.questionPicker.tags(selection.onlySubject, selection.categories)
         }
         tags = fetched
         // 分类变窄后，已选标签若不在新列表里则清掉，避免留下看不见也关不掉的暗筛选
@@ -157,9 +175,9 @@ fun PracticeHomeScreen(
     // 让两个范围开关在勾选前就能判断这次值不值得刷。顺序/随机与计数无关故不参与。
     LaunchedEffect(selection) {
         val filter = selection.toFilter()
-        matchedCount = container.practiceRepository.countMatching(filter)
-        wrongCount = container.practiceRepository.wrongCount(filter)
-        favoriteCount = container.practiceRepository.favoriteCount(filter)
+        matchedCount = container.questionPicker.countMatching(filter)
+        wrongCount = container.questionPicker.wrongCount(filter)
+        favoriteCount = container.questionPicker.favoriteCount(filter)
     }
 
     // 底栏是浮层、内容穿到它背后（ADR-0010）：末尾留出底栏高度，否则最后一张卡被永久遮住
@@ -180,7 +198,7 @@ fun PracticeHomeScreen(
                 Text(stringResource(R.string.practice_card_filters), style = MaterialTheme.typography.titleMedium)
 
                 // ---- 科目 ----
-                if (subjects.isNotEmpty()) {
+                if (ready && subjects.isNotEmpty()) {
                     SectionLabel(stringResource(R.string.practice_filter_subject))
                     Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
                         subjects.forEach { subject ->
@@ -197,7 +215,9 @@ fun PracticeHomeScreen(
 
                 // ---- 分类（跟随科目）----
                 SectionLabel(stringResource(R.string.practice_filter_category))
-                if (categories.isEmpty()) {
+                if (!ready) {
+                    // 首帧占位：此处若渲染空态文案，会被随后到达的 chips 顶掉（pitfalls 2.13）
+                } else if (categories.isEmpty()) {
                     Text(
                         stringResource(R.string.practice_empty_bank),
                         style = MaterialTheme.typography.bodyMedium,
@@ -223,7 +243,9 @@ fun PracticeHomeScreen(
                 }
 
                 // ---- 标签（跟随已选分类；比分类更细，承担挑专题刷的需求）----
-                if (selection.categories.isEmpty()) {
+                if (!ready) {
+                    // 首帧占位：不渲染提示文案，避免与随后到达的标签 chips 交替闪现
+                } else if (selection.categories.isEmpty()) {
                     Text(
                         stringResource(R.string.practice_tag_hint),
                         style = MaterialTheme.typography.bodyMedium,
@@ -246,7 +268,7 @@ fun PracticeHomeScreen(
                 }
 
                 // ---- 题型 ----
-                if (types.isNotEmpty()) {
+                if (ready && types.isNotEmpty()) {
                     SectionLabel(stringResource(R.string.practice_filter_type))
                     types.chunked(4).forEach { rowTypes ->
                         Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
@@ -265,25 +287,29 @@ fun PracticeHomeScreen(
 
                 // ---- 范围（两个开关取交集：同时打开 = 既答错过又被收藏）----
                 SectionLabel(stringResource(R.string.practice_filter_scope))
-                Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
-                    FilterChip(
-                        selected = selection.onlyWrong,
-                        onClick = { selection = selection.copy(onlyWrong = !selection.onlyWrong) },
-                        label = { Text(stringResource(R.string.practice_scope_wrong_count, wrongCount)) },
-                    )
-                    FilterChip(
-                        selected = selection.onlyFavorite,
-                        onClick = { selection = selection.copy(onlyFavorite = !selection.onlyFavorite) },
-                        label = { Text(stringResource(R.string.practice_scope_favorite_count, favoriteCount)) },
-                    )
+                if (ready) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                        FilterChip(
+                            selected = selection.onlyWrong,
+                            onClick = { selection = selection.copy(onlyWrong = !selection.onlyWrong) },
+                            label = { Text(stringResource(R.string.practice_scope_wrong_count, wrongCount)) },
+                        )
+                        FilterChip(
+                            selected = selection.onlyFavorite,
+                            onClick = { selection = selection.copy(onlyFavorite = !selection.onlyFavorite) },
+                            label = { Text(stringResource(R.string.practice_scope_favorite_count, favoriteCount)) },
+                        )
+                    }
                 }
 
-                // 卡尾：筛选结果预览（计数接口不受题量上限截断）
-                Text(
-                    stringResource(R.string.practice_matched_count, matchedCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // 卡尾：筛选结果预览（计数接口不受题量上限截断）；首帧不给假计数
+                if (ready) {
+                    Text(
+                        stringResource(R.string.practice_matched_count, matchedCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -341,13 +367,13 @@ fun PracticeHomeScreen(
                 Button(
                     onClick = {
                         scope.launch {
-                            val questions = container.practiceRepository.pickQuestions(selection.toFilter())
+                            val questions = container.questionPicker.pick(selection.toFilter())
                             if (questions.isNotEmpty()) {
                                 onStartPractice(questions.map { it.questionId }, shuffleOptions)
                             }
                         }
                     },
-                    enabled = matchedCount > 0,
+                    enabled = ready && matchedCount > 0,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.practice_start))
@@ -360,9 +386,9 @@ fun PracticeHomeScreen(
 
     // 题量半模态面板：草稿值随滑块走，确定才写回；与解析面板同一交互语言（ADR-0007）
     if (showLimitSheet) {
-        LaunchedEffect(limitDraft) {
-            draftMatchedCount = container.practiceRepository.countMatching(selection.toFilter())
-        }
+        // 面板里的匹配数与卡片尾行是同一个表达式的同一个值，故直接复用 matchedCount：
+        // 原先前者由 `LaunchedEffect(limitDraft)` 另查一次库——key 是滑块草稿、查询参数却与它无关，
+        // 拖一次滑块要打几十次结果恒定的查询，而且算出来的值永远等于后者
         ModalBottomSheet(onDismissRequest = { showLimitSheet = false }) {
             Column(
                 modifier = Modifier
@@ -383,7 +409,7 @@ fun PracticeHomeScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.sm),
                 )
                 Text(
-                    stringResource(R.string.practice_matched_count, draftMatchedCount),
+                    stringResource(R.string.practice_matched_count, matchedCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -6,6 +6,7 @@ import com.baiyin.zhilian.data.batch.BatchImportService
 import com.baiyin.zhilian.data.db.ZhilianDatabase
 import com.baiyin.zhilian.data.practice.PracticeRepository
 import com.baiyin.zhilian.data.practice.PracticeSessionLoader
+import com.baiyin.zhilian.data.practice.QuestionPicker
 import com.baiyin.zhilian.data.question.QuestionBank
 
 /**
@@ -21,6 +22,9 @@ class AppContainer(context: Context) {
     val importService: BatchImportService = BatchImportService(context, database)
     val practiceRepository: PracticeRepository = PracticeRepository(database)
     val questionBank: QuestionBank = QuestionBank(database)
+
+    /** 选题（C7）：条件拼装 + 排序 + 四个投影收在一处；作答与统计仍在 [practiceRepository] */
+    val questionPicker: QuestionPicker = QuestionPicker(database.questionDao())
 
     /** 会话载入器（C1）：依赖只有「按 ID 取题」一件，故按函数注入，单测可给内存实现 */
     val practiceSessionLoader: PracticeSessionLoader = PracticeSessionLoader(questionBank::get)

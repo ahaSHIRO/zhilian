@@ -54,6 +54,15 @@ internal class BottomBarDragState(
     var isDragging by mutableStateOf(false)
         private set
 
+    /**
+     * 是否正在跑松手吸附动画。
+     *
+     * 这是本状态机的不变量探针：**起拖必须先把在途吸附取消掉**——[settle] 把
+     * 「动画跑完 → 回调导航」绑在同一个 job 上，上次松手的动画没跑完就再次起拖，
+     * 两边会抢同一个 [value]，且旧回调照旧执行：用户正拖向 D，页面却切到 B。
+     */
+    internal val isSettling: Boolean get() = settleJob?.isActive == true
+
     private var settleJob: Job? = null
     private var pressJob: Job? = null
     private var velocityJob: Job? = null
@@ -74,8 +83,15 @@ internal class BottomBarDragState(
         return true
     }
 
-    /** 拖动正式开始：接管位置 */
+    /**
+     * 拖动正式开始：接管位置。
+     *
+     * **先取消在途的松手动画**（与 [cancelDrag] 同一句）：不取消的话，上次松手的
+     * `settle` 仍在跑，它的逐帧回调会与 [drag] 抢同一个 [value]（胶囊抖动、回跳），
+     * 且动画结束时那次**过期的导航回调**仍会执行——用户已改拖别的格子，页面却切回去。
+     */
     fun beginDrag() {
+        settleJob?.cancel()
         isDragging = true
     }
 

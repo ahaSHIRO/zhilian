@@ -31,7 +31,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.BottomBarStyle
+import com.baiyin.zhilian.data.Read
 import com.baiyin.zhilian.data.ThemeMode
+import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.isLiquidGlassSupported
 import com.baiyin.zhilian.ui.components.label
@@ -47,10 +49,13 @@ fun SettingsScreen(
     onOpenBatches: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val themeMode by container.settingsRepository.themeMode
-        .collectAsStateWithLifecycle(initialValue = ThemeMode.FOLLOW_SYSTEM)
-    val bottomBarStyle by container.settingsRepository.bottomBarStyle
-        .collectAsStateWithLifecycle(initialValue = BottomBarStyle.LIQUID_GLASS)
+    val themeModeRead by container.settingsRepository.themeMode
+        .collectAsStateWithLifecycle(initialValue = Read.Pending)
+    val bottomBarStyleRead by container.settingsRepository.bottomBarStyle
+        .collectAsStateWithLifecycle(initialValue = Read.Pending)
+    // 设置未读到前两个选择器都**不预选**任何档：把默认值画成「已选中」是假状态
+    val themeMode = themeModeRead.valueOrNull
+    val bottomBarStyle = bottomBarStyleRead.valueOrNull
     val scope = rememberCoroutineScope()
     var confirmClear by remember { mutableStateOf(false) }
     var showCleared by remember { mutableStateOf(false) }
