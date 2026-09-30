@@ -31,6 +31,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.data.BottomBarStyle
+import com.baiyin.zhilian.data.practice.ProcessToken
+import com.baiyin.zhilian.data.practice.SessionArgs
 import com.baiyin.zhilian.ui.components.ZhilianBottomBar
 import com.baiyin.zhilian.ui.components.resolveBottomBarStyle
 import com.baiyin.zhilian.ui.screens.bank.BankScreen
@@ -48,6 +50,9 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 /** 子页面路由（不在底部导航显示） */
 const val ROUTE_PRACTICE_SESSION = "practice_session"
 const val ROUTE_BATCHES = "batches"
+
+/** 会话参数在发起页 savedStateHandle 中的键（载荷见 [SessionArgs]） */
+private const val KEY_SESSION_ARGS = "sessionArgs"
 
 /** tab 序号；非 tab 路由（会话页、批次管理页）返回 null */
 private fun tabIndex(route: String?): Int? =
@@ -169,8 +174,13 @@ fun ZhilianApp(
                     PracticeHomeScreen(
                         container = container,
                         onStartPractice = { questionIds, shuffleOptions ->
-                            navController.currentBackStackEntry?.savedStateHandle?.set("questionIds", questionIds)
-                            navController.currentBackStackEntry?.savedStateHandle?.set("shuffleOptions", shuffleOptions)
+                            // 单一载荷写入发起页 savedStateHandle，会话页经
+                            // previousBackStackEntry 读取（官方「向上一页回传」模式）；
+                            // 顺带记下写入时的进程令牌，供重建时区分「配置变更」与「进程终止」
+                            navController.currentBackStackEntry?.savedStateHandle?.set(
+                                KEY_SESSION_ARGS,
+                                SessionArgs(questionIds, shuffleOptions, ProcessToken.value),
+                            )
                             navController.navigate(ROUTE_PRACTICE_SESSION)
                         },
                     )
@@ -188,16 +198,19 @@ fun ZhilianApp(
                     )
                 }
                 composable(ROUTE_PRACTICE_SESSION) {
-                    // 题目 ID 由发起页 savedStateHandle 传递，经 NavController.previousBackStackEntry 读取（官方模式）
-                    val questionIds = navController.previousBackStackEntry
-                        ?.savedStateHandle?.get<List<String>>("questionIds").orEmpty()
-                    val shuffleOptions = navController.previousBackStackEntry
-                        ?.savedStateHandle?.get<Boolean>("shuffleOptions") ?: true
+                    // 会话参数由发起页写入其 savedStateHandle，经 previousBackStackEntry 读取（官方模式）
+                    val args = navController.previousBackStackEntry
+                        ?.savedStateHandle?.get<SessionArgs>(KEY_SESSION_ARGS)
                     PracticeSessionScreen(
                         container = container,
-                        questionIds = questionIds,
-                        shuffleOptions = shuffleOptions,
-                        onExit = { navController.popBackStack() },
+                        args = args,
+                        onExit = {
+                            // navigation 不清理 savedStateHandle（2.10.2 全量源码零引用），
+                            // 弹出前清掉参数，避免上一次的选择残留在栈里被下次读到
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle?.remove<SessionArgs>(KEY_SESSION_ARGS)
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composable(ROUTE_BATCHES) {

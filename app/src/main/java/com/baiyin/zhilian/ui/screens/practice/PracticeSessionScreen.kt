@@ -36,7 +36,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,11 +44,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.practice.PracticeSession
+import com.baiyin.zhilian.data.practice.ProcessToken
+import com.baiyin.zhilian.data.practice.SessionArgs
 import com.baiyin.zhilian.data.practice.SessionFeedback
+import com.baiyin.zhilian.data.practice.SessionLoad
 import com.baiyin.zhilian.data.practice.SessionSummary
 import com.baiyin.zhilian.data.practice.SubmitSummary
 import com.baiyin.zhilian.data.practice.UserAnswer
@@ -65,40 +70,63 @@ import kotlinx.coroutines.launch
  * 练习会话：一题一卡的卡片流（ADR-0003）。
  * - HorizontalPager 左右滑动切题，peek 露边暗示；滑动纯导航，未提交可滑回修改
  * - 提交后就地高亮 + 反馈横幅留在卡内；解析走半模态面板，**双击已提交题卡**弹出（ADR-0007）
- * - 选项打乱：按 questionId 种子稳定打乱单选/多选行序（开关在配置页，默认开）
+ * - 选项打乱：按 questionId 种子稳定打乱单选/多选行序（开关随会话参数带入）
  * - 跳过为卡内显式按钮，不记作答；结尾卡收束会话（统计 + 会话得分 + 完成）
- * - 首版退出不恢复会话（README），已提交作答保留在库中
+ * - 首版退出不恢复会话，**但配置变更不是退出**（CONTEXT.md「练习会话」）
  *
  * 会话的口径（得分、可提交性、反馈分级、未答定位）全在 [PracticeSession]；
- * 本页只持有 Compose 瞬时状态并转发事件。
+ * 会话状态（作答/提交/跳过、载入四态）全在 [PracticeSessionState]；本页只转发事件并渲染。
+ *
+ * 四态分流：只有 [SessionLoad.Loading] 渲染转圈，其余三态各自给出路——原先「题目列表为空」
+ * 一律转圈，参数丢失时会得到永不结束的加载，只能杀进程。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeSessionScreen(
     container: AppContainer,
-    questionIds: List<String>,
-    shuffleOptions: Boolean,
+    args: SessionArgs?,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var questions by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
-    /** 未提交的当前作答（按题索引） */
-    val answers = remember { mutableStateMapOf<Int, UserAnswer>() }
-    /** 已提交结果（按题索引）；存在即该卡为只读反馈态 */
-    val submitted = remember { mutableStateMapOf<Int, SubmitSummary>() }
-    /** 点过跳过且未作答的题索引（作答后移除） */
-    val skipped = remember { mutableStateMapOf<Int, Boolean>() }
-    /** 提交进行中（按题索引）；防双击重复落库（ADR-0004） */
-    val submitting = remember { mutableStateMapOf<Int, Boolean>() }
-    /** 当前升起半模态解析面板的题索引；null = 面板关闭（ADR-0007） */
-    var explanationFor by remember { mutableStateOf<Int?>(null) }
+    // 状态容器挂在 entry 作用域的 ViewModel 上：配置变更时随 Activity 的 ViewModelStore 存活
+    val state: PracticeSessionState = viewModel(factory = viewModelFactory {
+        initializer {
+            PracticeSessionState(
+                loader = container.practiceSessionLoader,
+                submitAnswer = container.practiceRepository::submitAnswer,
+                args = args,
+                processToken = ProcessToken.value,
+            )
+        }
+    })
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(questionIds) {
-        questions = container.questionBank.get(questionIds)
+    // 幂等：配置变更后重组会重跑本 effect，已载入的会话不会被重新查询
+    LaunchedEffect(state) { state.load() }
+
+    val load = state.load
+    // 进程终止重建：回退栈被系统恢复，会话状态却随进程消失。停在这里就是一个「什么都没记住」
+    // 的会话页，故按未完成会话直接退回配置页（CONTEXT.md「练习会话」），不显示任何错误态。
+    LaunchedEffect(load) { if (load.isStale) onExit() }
+
+    if (load !is SessionLoad.Ready) {
+        if (!load.isStale) {
+            SessionGate(
+                load = load,
+                onRetry = { scope.launch { state.load(force = true) } },
+                onExit = onExit,
+                modifier = modifier,
+            )
+        }
+        return
     }
 
-    val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { questions.size + 1 })
+    val questions = load.questions
+    val pageCount = questions.size + 1
+    val pagerState = rememberPagerState(pageCount = { pageCount })
+
+    // 解析面板属当前卡片的瞬时 UI 态，不进状态容器：换题/重建后回到无面板是合理行为
+    var explanationFor by remember { mutableStateOf<Int?>(null) }
 
     // 滑到别的题就收起面板：面板属于当前卡片，不跨题保留（ADR-0007）
     LaunchedEffect(pagerState.currentPage) {
@@ -107,19 +135,6 @@ fun PracticeSessionScreen(
 
     // 返回手势/按键不在此拦截：面板打开时由 ModalBottomSheet 原生预测返回（跟手下移关闭）
     // 优先消费；面板关闭时返回由 NavHost 接管——侧滑跟手退出会话（ADR-0009），不再弹确认框。
-
-    if (questions.isEmpty()) {
-        Column(
-            modifier = modifier.fillMaxSize().padding(ZhilianSpacing.screenEdge),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-
-    val pageCount = questions.size + 1
 
     Column(
         modifier = modifier
@@ -139,6 +154,15 @@ fun PracticeSessionScreen(
                 progress = { (pagerState.currentPage + 1f) / pageCount },
                 modifier = Modifier.fillMaxWidth().padding(top = ZhilianSpacing.sm),
             )
+            // 部分题已被停用：非阻断提示，避免用户以为题量随机缩水
+            if (load.droppedCount > 0) {
+                Text(
+                    stringResource(R.string.session_dropped, load.droppedCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = ZhilianSpacing.xs),
+                )
+            }
         }
 
         HorizontalPager(
@@ -150,10 +174,16 @@ fun PracticeSessionScreen(
             if (page == questions.size) {
                 // 结尾卡统计与会话得分口径见 CONTEXT.md「会话得分」/ [PracticeSession.summary]
                 SummaryCard(
-                    summary = PracticeSession.summary(submitted.values, questions.size, skipped.size),
+                    summary = PracticeSession.summary(
+                        results = state.submitted.values,
+                        questionCount = questions.size,
+                        skippedCount = state.skipped.size,
+                    ),
                     questionCount = questions.size,
                     firstUnansweredIndex = PracticeSession.firstUnansweredIndex(
-                        submittedIndices = submitted.keys.toSet(),
+                        submittedIndices = questions.indices
+                            .filter { questions[it].questionId in state.submitted }
+                            .toSet(),
                         questionCount = questions.size,
                     ),
                     onJumpToUnanswered = { index ->
@@ -162,32 +192,25 @@ fun PracticeSessionScreen(
                     onExit = onExit,
                 )
             } else {
+                val question = questions[page]
+                val questionId = question.questionId
                 QuestionCard(
-                    question = questions[page],
+                    question = question,
                     pageLabel = stringResource(R.string.session_progress, page + 1, questions.size),
-                    userAnswer = answers[page],
-                    result = submitted[page],
-                    isSkipped = skipped.containsKey(page),
-                    isSubmitting = submitting[page] == true,
-                    shuffleOptions = shuffleOptions,
-                    onAnswerChange = { answers[page] = it },
+                    userAnswer = state.answers[questionId],
+                    result = state.submitted[questionId],
+                    isSkipped = state.skipped.containsKey(questionId),
+                    isSubmitting = state.submitting.containsKey(questionId),
+                    shuffleOptions = state.shuffleOptions,
+                    onAnswerChange = { state.answer(questionId, it) },
                     onSubmit = {
-                        val userAnswer = answers[page]
-                        if (userAnswer != null && submitting[page] != true) {
-                            scope.launch {
-                                submitting[page] = true
-                                try {
-                                    val summary = container.practiceRepository.submitAnswer(questions[page], userAnswer)
-                                    submitted[page] = summary
-                                    skipped.remove(page)
-                                } finally {
-                                    submitting[page] = false
-                                }
-                            }
+                        val userAnswer = state.answers[questionId]
+                        if (userAnswer != null) {
+                            scope.launch { state.submit(question, userAnswer) }
                         }
                     },
-                    onSkip = { skipped[page] = true },
-                    onDoubleTap = if (submitted.containsKey(page)) {
+                    onSkip = { state.skip(questionId) },
+                    onDoubleTap = if (state.submitted.containsKey(questionId)) {
                         { explanationFor = page }
                     } else {
                         null
@@ -201,7 +224,7 @@ fun PracticeSessionScreen(
     val sheetPage = explanationFor
     if (sheetPage != null && sheetPage in questions.indices) {
         val question = questions[sheetPage]
-        val result = submitted[sheetPage]
+        val result = state.submitted[question.questionId]
         // 双击打开默认全屏（skipPartiallyExpanded=true 跳过半屏档）；
         // 短解析也无半屏露白、专注解析。下拉或点遮罩关闭，滑到下一题自动收起。
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -219,6 +242,65 @@ fun PracticeSessionScreen(
                 result = result,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+/** 进程终止重建：会话参数由上一个进程写入（CONTEXT.md「练习会话」不恢复未完成会话） */
+private val SessionLoad.isStale: Boolean
+    get() = this is SessionLoad.Failed && reason == SessionLoad.FailureReason.StaleSession
+
+/**
+ * 非 [SessionLoad.Ready] 三态的统一出口：转圈只在 [SessionLoad.Loading]，
+ * 其余两态都必须有可点的出路（重试只对可重试的失败开放）。
+ */
+@Composable
+private fun SessionGate(
+    load: SessionLoad,
+    onRetry: () -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val retryable = load is SessionLoad.Failed && load.reason == SessionLoad.FailureReason.LoadFailed
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(ZhilianSpacing.screenEdge),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when (load) {
+            SessionLoad.Loading -> CircularProgressIndicator()
+
+            is SessionLoad.Empty -> Text(
+                stringResource(R.string.session_empty),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            is SessionLoad.Failed -> Text(
+                stringResource(
+                    if (retryable) R.string.session_load_failed else R.string.session_load_missing_args,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // Ready 由调用方分流，这里到不了（仅为穷尽 when 保留）
+            is SessionLoad.Ready -> Unit
+        }
+
+        if (load !is SessionLoad.Loading) {
+            Row(
+                modifier = Modifier.padding(top = ZhilianSpacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
+            ) {
+                if (retryable) {
+                    Button(onClick = onRetry) { Text(stringResource(R.string.session_retry)) }
+                }
+                OutlinedButton(onClick = onExit) { Text(stringResource(R.string.back)) }
+            }
         }
     }
 }
