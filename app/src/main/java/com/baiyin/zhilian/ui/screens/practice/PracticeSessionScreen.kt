@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -155,7 +154,7 @@ fun PracticeSessionScreen(
     ) {
         // 固定进度区（卡片外顶部）：只统计题目——结尾卡不是「第 N 题」，
         // 故分母不含它（原先顶部写「第 1 / 21 题」而卡内写「第 1 / 20 题」，进度条也永远到不了 100%）。
-        // 水平内边距与卡片外缘对齐（同为 lg），进度条与卡片左右边界成一条线
+        // 水平内边距与**卡片内文**对齐（同为 lg）：卡片已通栏，若对齐卡片外缘就会贴到屏幕边
         val questionCount = questions.size.coerceAtLeast(1)
         val shownPage = (pagerState.currentPage + 1).coerceAtMost(questionCount)
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ZhilianSpacing.lg)) {
@@ -182,12 +181,12 @@ fun PracticeSessionScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            // 一屏只有本题卡片：屏边距收一档（xl→lg），页间距**不小于**屏边距（lg→xl）——
-            // 相邻卡露出的宽度 = 屏边距 − 页间距，取等或取大即彻底移出屏幕。
-            // 露出相邻卡片原是为暗示「可滑」（ADR-0003），但本 App 是单人自用，
-            // 进过一次就知道能滑；而露边会挤掉代码行宽度、也让视线多两块干扰。
-            contentPadding = PaddingValues(horizontal = ZhilianSpacing.lg),
-            pageSpacing = ZhilianSpacing.xl,
+            // 卡片**通栏**、一屏只有本题卡片：屏边距取 0，正文的左右 16dp 由卡片内边距承担，
+            // 因而正文仍与全 App 的屏边距对齐；页间距取 lg(16) —— **页间距 > 屏边距**即相邻卡
+            // 彻底移出屏幕（露出宽度 = 屏边距 − 页间距）。露出相邻卡原是为暗示「可滑」（ADR-0003），
+            // 但本 App 单人自用、进过一次就知道能滑，而露边只会挤掉程序题的代码行宽度。
+            // contentPadding 不给 = 0（默认值），卡片直接顶到屏幕左右边。
+            pageSpacing = ZhilianSpacing.lg,
         ) { page ->
             if (page == questions.size) {
                 // 结尾卡统计与会话得分口径见 CONTEXT.md「会话得分」/ [PracticeSession.summary]
@@ -590,7 +589,8 @@ private fun SummaryCard(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(ZhilianSpacing.xl),
+                // 结尾卡内边距与题卡一致（同为 lg）：两页同处一个 pager，内边距不同会让翻页时文字左右跳
+                .padding(ZhilianSpacing.cardInner),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
