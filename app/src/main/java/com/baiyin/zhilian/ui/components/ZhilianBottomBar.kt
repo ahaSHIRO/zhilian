@@ -382,7 +382,10 @@ private fun CapsuleIndicator(
             // 不改布局坐标——虽然实测在 backdrop 2.0.1 上两者像素无差异（见 pitfalls 2.12），
             // 但 offset 才是语义正确的一侧，且不依赖库实现细节。
             .offset { IntOffset((slotWidth.toPx() * position).roundToInt(), 0) }
-            .padding(horizontal = ZhilianSpacing.xs, vertical = ZhilianSpacing.sm)
+            // 环缝四向等厚 = sm(8)：胶囊端弧是半圆，四向 padding 相等时内胶囊与底栏本体的
+            // 端弧圆心重合（外 R=32、内 r=24，环厚处处 8dp）。原先 horizontal=xs(4) /
+            // vertical=sm(8) 不同心，环厚在 4~8dp 间游走（ADR-0010 修订四）。
+            .padding(ZhilianSpacing.sm)
             .then(
                 when (style) {
                     BottomBarStyle.STANDARD -> Modifier

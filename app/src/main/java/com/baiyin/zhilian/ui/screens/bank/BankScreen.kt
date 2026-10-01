@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.collectAsLoadable
 import com.baiyin.zhilian.ui.components.TabLazyColumn
+import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlinx.coroutines.launch
 
@@ -149,7 +151,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    "  #" + q.typeLabel(),
+                                    "  #" + typeLabel(q.type),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -187,7 +189,11 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
         val question by questionFlow.collectAsStateWithLifecycle(initialValue = null)
         val q = question
         if (q != null) {
-            ModalBottomSheet(onDismissRequest = { detailId = null }) {
+            ModalBottomSheet(
+                onDismissRequest = { detailId = null },
+                // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp，底部贴边取 0
+                shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -221,14 +227,6 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             }
         }
     }
-}
-
-private fun QuestionEntity.typeLabel(): String = when (type) {
-    "single_choice" -> "单选"
-    "multiple_choice" -> "多选"
-    "true_false" -> "判断"
-    "fill_in_blank" -> "填空"
-    else -> type
 }
 
 /** 详情页答案预览（人读形式）；答案解码走 [QuestionContent]，与判分同一份读取 */

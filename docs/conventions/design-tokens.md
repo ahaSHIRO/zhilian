@@ -56,7 +56,19 @@
 
 - **练习页卡片流通栏**（[ADR-0003](../adr/0003-practice-card-pager.md) 修订段,2026-09-30）:**一屏只呈现本题卡片**。屏边距取 **0**（卡片顶到屏幕左右缘,正文的左右 16dp 由卡片内边距 `lg` 承担,故正文仍与全 App 屏边距对齐）;页间距取 `lg`(16)——**页间距大于屏边距**,相邻卡即彻底移出屏幕;进度区水平内边距与卡片内文对齐（同为 `lg`）。此前的「peek 露边 24dp、不纳入 token」例外条款随之作废。
 - **不纳入间距 token**:边框宽度(`1.dp`)、卡片阴影高度(`2dp`,ADR-0005 已定)、`elevation`——沿用 ADR-0005,不另设 token。
+- **底栏胶囊/玻璃几何不纳入间距 token**(2026-10-01 补记):ZhilianBottomBar 内的具名常量(`BAR_HEIGHT`、`GLASS_REFRACTION_*`、`BAR_INNER_SHADOW` 等)是 [ADR-0010](../adr/0010-bottom-bar-liquid-glass-and-content-through.md) 液态玻璃组件的实现几何,属组件内部细节而非布局节奏——不迁移、不收编,审查时勿再盘问。选中胶囊环缝等厚约定见 ADR-0010 修订四。
 - **窗口避让**:状态栏 / 小白条 / 输入法避让走 `WindowInsets`,不属间距 token,见 [edge-to-edge.md](./edge-to-edge.md)。
+
+### 2.5 卡内纵向间距判例(2026-10-01 裁决)
+
+「卡内元素纵向间距」此前在 `lg`(16) 与 `sm`(8) 两档间无判据混用,经裁决按卡片语义定档:
+
+| 卡片语义 | 档位 | 现有实例(与本判例吻合,零代码改动) |
+|---|---|---|
+| 表单/配置类卡(人在填表,行间疏朗) | `lg`(16) | PracticeHomeScreen 筛选条件卡、会话设置卡;SettingsScreen 外观/数据卡 |
+| 数据/列表密集卡(信息密度优先) | `sm`(8) | StatsScreen 统计卡;BatchManageScreen 三处列表区;BankScreen 题库详情区 |
+
+新卡片按此判例取档,不再逐个重猜。
 
 ## 三、圆角 Shapes
 
@@ -70,7 +82,7 @@
 | `small` | 8 | 预留(小元素) |
 | `medium` | 12 | ZhilianOptionRow 选项行 |
 | `large` | 16 | ZhilianCard 主卡 |
-| `extraLarge` | 20 | 预留(半模态面板等大容器) |
+| `extraLarge` | 20 | 半模态面板等大容器(2026-10-01 起由 ModalBottomSheet ×3 消费,取顶角) |
 
 ### 3.2 组件归属
 
@@ -78,6 +90,7 @@
 |---|---|---|
 | `ZhilianCard` | `MaterialTheme.shapes.large` | 16dp |
 | `ZhilianOptionRow` | `MaterialTheme.shapes.medium` | 12dp |
+| `ModalBottomSheet` ×3(题量滑块 / 解析面板 / 题目详情) | `extraLarge` **顶角**(2026-10-01 收口) | 20dp,`copy(bottomStart = 0.dp, bottomEnd = 0.dp)`——底部贴屏幕边取 0(与 M3 库默认形态一致);原为 28dp 库默认逃逸,`extraLarge` 槽位自此兑现 |
 
 代码块圆角沿用库 `LocalMarkdownDimens.current.codeBackgroundCornerSize`,非本项目 token,不在本规范范围。
 

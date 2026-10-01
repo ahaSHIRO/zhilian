@@ -2,6 +2,7 @@ package com.baiyin.zhilian.ui.screens.practice
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -61,6 +63,7 @@ import com.baiyin.zhilian.data.practice.UserAnswer
 import com.baiyin.zhilian.data.question.QuestionContent
 import com.baiyin.zhilian.ui.components.QuestionMarkdown
 import com.baiyin.zhilian.ui.components.ZhilianCard
+import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.components.ZhilianOptionRow
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlin.random.Random
@@ -213,7 +216,6 @@ fun PracticeSessionScreen(
                 val questionId = question.questionId
                 QuestionCard(
                     question = question,
-                    pageLabel = stringResource(R.string.session_progress, page + 1, questions.size),
                     userAnswer = state.answers[questionId],
                     result = state.submitted[questionId],
                     isSkipped = state.skipped.containsKey(questionId),
@@ -252,6 +254,9 @@ fun PracticeSessionScreen(
             onDismissRequest = { explanationFor = null },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
+            // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp 兑现「半模态面板」预留；
+            // 底部贴屏幕边取 0（与 M3 库默认形态一致，底部圆角会在屏幕底两角露缝）
+            shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
         ) {
             ExplanationSheet(
                 question = question,
@@ -368,7 +373,6 @@ private fun ExplanationSheet(
 @Composable
 private fun QuestionCard(
     question: QuestionEntity,
-    pageLabel: String,
     userAnswer: UserAnswer?,
     result: SubmitSummary?,
     isSkipped: Boolean,
@@ -431,7 +435,9 @@ private fun QuestionCard(
                 .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
             verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap),
         ) {
-            Text(pageLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // 左上标签显题型而非「第 n / N 题」：题号由卡外进度区唯一承担（进度条 + n/N 文字），
+            // 卡内不再重复显示（2026-10-01，ADR-0003 修订段）
+            Text(typeLabel(question.type), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             QuestionMarkdown(content = question.stem)
 
             when (question.type) {

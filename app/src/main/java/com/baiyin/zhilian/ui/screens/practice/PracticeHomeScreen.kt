@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -31,12 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeSelection
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.TabVerticalScrollColumn
+import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -378,7 +381,11 @@ fun PracticeHomeScreen(
         // 面板里的匹配数与卡片尾行是同一个表达式的同一个值，故直接复用 matchedCount：
         // 原先前者由 `LaunchedEffect(limitDraft)` 另查一次库——key 是滑块草稿、查询参数却与它无关，
         // 拖一次滑块要打几十次结果恒定的查询，而且算出来的值永远等于后者
-        ModalBottomSheet(onDismissRequest = { showLimitSheet = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { showLimitSheet = false },
+            // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp，底部贴边取 0
+            shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -433,15 +440,5 @@ private fun subjectLabel(code: String): String = when (code) {
     "java" -> "Java"
     "arkts" -> "ArkTS"
     "interview" -> "面试"
-    else -> code
-}
-
-/** 题型代码 → 展示名 */
-@Composable
-private fun typeLabel(code: String): String = when (code) {
-    "single_choice" -> stringResource(R.string.type_single_choice)
-    "multiple_choice" -> stringResource(R.string.type_multiple_choice)
-    "true_false" -> stringResource(R.string.type_true_false)
-    "fill_in_blank" -> stringResource(R.string.type_fill_in_blank)
     else -> code
 }
