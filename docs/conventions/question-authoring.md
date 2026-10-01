@@ -278,16 +278,16 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 4. 词表缺词：向维护者提议（标签 + 理由 + 拟归属分类），扩表后方可使用
 5. 新标签进入词表时同步登记到下表对应分类
 
-### Kotlin（存量 v5，2026-10-01 batch-0013 扩「测试&调试」类 `advancetimeby`、`backgroundscope`、`debug-probes`、`test-dispatcher`〔暂缓 runcurrent/advanceuntilidle——与 advancetimeby 同考点强耦合；uncompletedcoroutines——异常类名非知识维度；setmain——未出题不预登记〕；`test-dispatcher` 与协程调度类存量 `unconfined` 是不同身份：`UnconfinedTestDispatcher` 跳 delay 而 `Dispatchers.Unconfined` 不跳，1.10.2 实测差 3000ms vs 2ms；v4 2026-10-01 batch-0012 扩「共享状态」类 `semaphore`、`trylock`，驳回 `withlock`〔语法糖无独立筛选语义〕与 `owner`〔全局语义过泛，将来如需用收敛词形 owner-token 再提〕；v3 2026-09-30 追认 batch-0006 在用的七个数据流标签并移除零使用的 channel-flow；v2 2026-09-28 自 4 个批次整理，新增通道／数据流／共享状态／测试与调试四类及其标签）
+### Kotlin（存量 v7，2026-10-01 batch-0015 扩「协程调度」类 `viewmodelscope`、`lifecycle`、`launchedeffect`〔`lifecycle` 与 `lifecyclescope` 二选一取前者——一词覆盖 lifecycleScope/repeatOnLifecycle/State/Owner 整条线，拆开割裂；`remembercoroutinescope` 等按提议推迟〕；v6 2026-10-01 batch-0014 扩「基础语法」类 `sealed-class`、`when-exhaustive`、`enum-class`、`ui-state`〔驳回 `sealed-interface`——仅 1 题使用，改挂 `sealed-class`，将来题量起再登记；`when-exhaustive` 与 `sealed-class` 正交：穷尽性对枚举/Boolean/可空同样成立〕；v5 2026-10-01 batch-0013 扩「测试&调试」类 `advancetimeby`、`backgroundscope`、`debug-probes`、`test-dispatcher`〔暂缓 runcurrent/advanceuntilidle——与 advancetimeby 同考点强耦合；uncompletedcoroutines——异常类名非知识维度；setmain——未出题不预登记〕；`test-dispatcher` 与协程调度类存量 `unconfined` 是不同身份：`UnconfinedTestDispatcher` 跳 delay 而 `Dispatchers.Unconfined` 不跳，1.10.2 实测差 3000ms vs 2ms；v4 2026-10-01 batch-0012 扩「共享状态」类 `semaphore`、`trylock`，驳回 `withlock`〔语法糖无独立筛选语义〕与 `owner`〔全局语义过泛，将来如需用收敛词形 owner-token 再提〕；v3 2026-09-30 追认 batch-0006 在用的七个数据流标签并移除零使用的 channel-flow；v2 2026-09-28 自 4 个批次整理，新增通道／数据流／共享状态／测试与调试四类及其标签）
 
 | 分类 | 合法标签 |
 |---|---|
-| 基础语法 | basics\*、equality、operators、variables |
+| 基础语法 | basics\*、enum-class、equality、operators、sealed-class、ui-state、variables、when-exhaustive |
 | 空安全 | null-safety、operators、collections |
 | 集合 | collections、immutable |
 | 函数 | functions、basics\* |
 | 协程基础 | async、awaitall、cancellation、concurrency、coroutines、coroutinescope、exception-handler、global-scope、launch、runblocking、select、structured-concurrency、supervisorscope、withtimeout |
-| 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、unconfined、undispatched、withcontext |
+| 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、launchedeffect、lifecycle、main-thread、suspending-functions、unconfined、undispatched、viewmodelscope、withcontext |
 | 通道 | channel、capacity、collect、exception |
 | 数据流 | flow、state-flow、shared-flow、replay、flowon、collect、exception、capacity、flow-operators、zip、combine、flatmap、transform、operator-fusion、buffer |
 | 共享状态 | mutex、semaphore、synchronized、trylock |
@@ -295,11 +295,12 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 \* `basics` 为弱标签（语义过泛），**冻结**——存量题保留，新题不得再使用。
 
-### Java（存量 v1，2026-09-29 自 batch-0008 建档）
+### Java（存量 v2，2026-10-01 batch-0017 新增「并发编程」类 `thread`、`thread-state`、`interrupt`、`volatile`、`visibility`、`happens-before`、`atomicity`、`daemon-thread`、`jmm`〔自驳候选存档：`synchronized`——与 Kotlin 词表同名且本批未出题，将来出互斥语义题再提；`monitor-lock`——并入 thread-state 的 BLOCKED 语义；`visibility-model`/`memory-visibility`——visibility 同义变体；`thread-lifecycle`——与 thread 重叠；`atomic`——与 atomicity 去后缀变体；`volatile-ordering`——volatile+jmm 组合可表达〕；v1 2026-09-29 自 batch-0008 建档）
 
 | 分类 | 合法标签 |
 |---|---|
 | 基础语法 | bitwise、shift、complement |
+| 并发编程 | thread、thread-state、interrupt、volatile、visibility、happens-before、atomicity、daemon-thread、jmm |
 
 ### ArkTS
 
