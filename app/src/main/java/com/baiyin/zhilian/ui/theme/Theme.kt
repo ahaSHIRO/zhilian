@@ -1,6 +1,7 @@
 package com.baiyin.zhilian.ui.theme
 
 import android.content.ContextWrapper
+import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -22,6 +23,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalView
 import com.baiyin.zhilian.data.ThemeMode
 
@@ -56,12 +59,24 @@ fun ZhilianTheme(
     val colorScheme = if (darkTheme) ZhilianDarkScheme else ZhilianLightScheme
 
     val view = LocalView.current
+    // @Preview 没有真窗口，本来就不该改系统栏——用它把「预期内的上溯不到」与「接线断了」分开
+    val isInspection = LocalInspectionMode.current
+    // 接线断了要让开发期就响；release 不拿用户当测试机（那里静默降级成图标错色即可）
+    val appFlags = LocalContext.current.applicationInfo.flags
+    val isDebuggable = (appFlags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     LaunchedEffect(darkTheme) {
         var ctx = view.context
         while (ctx is ContextWrapper && ctx !is ComponentActivity) {
             ctx = ctx.baseContext
         }
-        val activity = ctx as? ComponentActivity ?: return@LaunchedEffect
+        val activity = ctx as? ComponentActivity
+            ?: run {
+                // 预览环境属预期；debug 构建下接线断了立刻响（release 放行，不拿用户当测试机）
+                check(isInspection || !isDebuggable) {
+                    "ZhilianTheme 未能从 LocalView 上溯到宿主 Activity，系统栏样式不会生效"
+                }
+                return@LaunchedEffect
+            }
         val style = if (darkTheme) {
             SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         } else {
