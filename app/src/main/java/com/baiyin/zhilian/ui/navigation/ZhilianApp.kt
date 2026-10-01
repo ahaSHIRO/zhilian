@@ -1,5 +1,6 @@
 package com.baiyin.zhilian.ui.navigation
 
+import android.content.pm.ApplicationInfo
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
@@ -15,11 +16,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -48,6 +56,7 @@ import com.baiyin.zhilian.ui.theme.drawZhilianFog
 import com.baiyin.zhilian.ui.theme.zhilianBaseColor
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import kotlinx.coroutines.delay
 
 /** tab 序号；非 tab 路由（会话页、批次管理页）返回 null */
 private fun tabIndex(route: String?): Int? =
@@ -106,8 +115,9 @@ private fun NavGraphBuilder.tabDestination(
  * 单 Scaffold + 悬浮底栏 + NavHost 的应用外壳。
  *
  * 底栏是**浮层**（ADR-0010）：内容延伸到屏幕底部、穿到底栏背后，玻璃才有内容可折射。
- * 因此这里只避让**状态栏**，底部避让由各 tab 屏自行用底栏模块的两个 adapter
- * 留白（`BottomBarTrailingSpacer()` / `rememberBottomBarContentPadding()`）。
+ * 因此这里只避让**状态栏**，底部留白由各 tab 屏的外壳（`TabVerticalScrollColumn` /
+ * `TabLazyColumn`）自动叠加；本文件另在 debug 构建下自检一次「内容层底边是否抵窗口底边」，
+ * 防止有人给外壳加底部 padding、把穿透悄悄截断。
  * 子系统避让总规范见 docs/conventions/edge-to-edge.md。
  *
  * 背景光雾与底栏折射源是同一份：外壳录一份 layerBackdrop（底色 + 光雾 + 页面内容），
@@ -162,6 +172,26 @@ fun ZhilianApp(
         drawContent()
     }
 
+    // ADR-0010 的穿透契约在此自检：内容层必须通到窗口底边。一旦有人给外壳加底部 padding，
+    // 内容会被截断、招牌的液态玻璃失去折射物——而这种破坏**静默**，只有真机滚到底才看得出来。
+    // 只在 debug 构建跑，并避开 IME / 转场中间态（不一致时隔一拍复验，仍不一致才判违约）。
+    val isDebuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    val windowInfo = LocalWindowInfo.current
+    var contentBottomPx by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        if (!isDebuggable) return@LaunchedEffect
+        delay(800)
+        var windowBottom = windowInfo.containerSize.height.toFloat()
+        if (contentBottomPx > 0f && contentBottomPx < windowBottom - 1f) {
+            delay(400)
+            windowBottom = windowInfo.containerSize.height.toFloat()
+            check(contentBottomPx <= 0f || contentBottomPx >= windowBottom - 1f) {
+                "内容层底边(${contentBottomPx}px)未抵窗口底边(${windowBottom}px)：" +
+                    "有人给外壳加了底部 padding，底栏穿透已失效（ADR-0010 / edge-to-edge.md §底栏穿透）"
+            }
+        }
+    }
+
     Box(modifier.fillMaxSize()) {
         Scaffold(
             // containerColor 透明是为了透出雾蓝背景层（BackgroundFog），但这会让
@@ -178,8 +208,10 @@ fun ZhilianApp(
                 startDestination = TopLevelDestination.PRACTICE.route,
                 modifier = Modifier
                     .layerBackdrop(backdrop)
-                    // 只避让状态栏：底部留给内容穿透底栏
-                    .padding(top = innerPadding.calculateTopPadding()),
+                    // 只避让状态栏：底部留给内容穿透底栏。
+                    // ⚠️ 这里加任何底部 padding 都会截断穿透（debug 构建会被上面的自检抓到）
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .onGloballyPositioned { contentBottomPx = it.boundsInWindow().bottom },
                 // 二级页默认转场：经典水平侧滑（下层静止，无淡入淡出）；tab 间切换由 tabDestination 覆盖。
                 // 不含 predictivePop*——预测性返回已在 Manifest 停用（ADR-0009）。
                 enterTransition = { secondaryEnter() },

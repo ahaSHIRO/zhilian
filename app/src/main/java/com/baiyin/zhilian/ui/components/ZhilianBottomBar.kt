@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -118,8 +117,8 @@ private val BAR_INNER_SHADOW = 10.dp
  * - **纵向滑动** → 不接管（原地弹回），把事件留给下层，不堵住未来的纵向手势。
  *
  * 底栏是**浮层**：调用方必须让页面内容延伸到屏幕底部（不给底部避让），否则玻璃背后没有
- * 可折射的内容、效果会退化成一块半透明色块。各屏用 [BottomBarTrailingSpacer] 或
- * [rememberBottomBarContentPadding] 留白——两种 adapter 对应仅有的两种合法用法。
+ * 可折射的内容、效果会退化成一块半透明色块。tab 屏用 [TabVerticalScrollColumn] /
+ * [TabLazyColumn] 外壳，底部留白由外壳自动叠加。
  */
 @Composable
 fun ZhilianBottomBar(
@@ -280,32 +279,24 @@ internal fun bottomBarContentHeight(
     navigationBarBottom: Dp,
 ): Dp = barHeight + verticalPadding * 2 + navigationBarBottom
 
+/** 底栏为页面内容预留的高度（含系统手势条）；只给 [TabVerticalScrollColumn] / [TabLazyColumn] 用 */
 @Composable
-private fun rememberBottomBarReservedHeight(): Dp {
+internal fun rememberBottomBarReservedHeight(): Dp {
     val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     return bottomBarContentHeight(BAR_HEIGHT, BAR_VERTICAL_PADDING, navBar)
 }
 
 /**
- * tab 屏底部留白的两种 adapter（ADR-0010：内容穿到底栏背后，玻璃才有可折射物）。
+ * 内容末尾的底栏留白 Spacer，只给 [TabVerticalScrollColumn] 用。
  *
- * 「预留高度只能当尾部 Spacer 或 contentPadding、不能当外层 padding（否则内容
- * 滚不到底栏背后、穿透失效）」这条约束由接口形态保证——调用方能拿到的只有：
- *
- * - [BottomBarTrailingSpacer]：`verticalScroll` 的 Column 在**内容末尾**加的尾部 Spacer
- * - [rememberBottomBarContentPadding]：`LazyColumn` 的 `contentPadding` 底部值
+ * 留白**不直接暴露给页面**：页面走 tab 屏外壳（`TabScreen.kt`），由外壳统一叠加。
+ * 页面自己算既可能漏（最后一项被底栏永久遮住），也可能误当外层 padding 用（内容截在
+ * 底栏之上、玻璃失去折射物）。见 docs/conventions/edge-to-edge.md §底栏穿透。
  */
-
-/** `verticalScroll` 屏用：在内容末尾放一个为底栏预留的尾部 Spacer */
 @Composable
-fun BottomBarTrailingSpacer(modifier: Modifier = Modifier) {
+internal fun BottomBarTrailingSpacer(modifier: Modifier = Modifier) {
     Spacer(modifier.height(rememberBottomBarReservedHeight()))
 }
-
-/** `LazyColumn` 屏用：`contentPadding` 的底部值（顶部间距由各屏自行拼接） */
-@Composable
-fun rememberBottomBarContentPadding(): PaddingValues =
-    PaddingValues(bottom = rememberBottomBarReservedHeight())
 
 /* ------------------------------------------------------------------ 材质层 */
 

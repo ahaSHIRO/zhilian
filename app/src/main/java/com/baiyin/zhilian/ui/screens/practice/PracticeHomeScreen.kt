@@ -4,13 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -41,7 +36,7 @@ import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.practice.PracticeSelection
 import com.baiyin.zhilian.ui.components.Loadable
 import com.baiyin.zhilian.ui.components.ZhilianCard
-import com.baiyin.zhilian.ui.components.BottomBarTrailingSpacer
+import com.baiyin.zhilian.ui.components.TabVerticalScrollColumn
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -180,11 +175,8 @@ fun PracticeHomeScreen(
         favoriteCount = container.questionPicker.favoriteCount(filter)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(ZhilianSpacing.screenEdge),
+    TabVerticalScrollColumn(
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
     ) {
         // ---- 筛选条件卡：决定这次练什么（科目/分类/标签/题型/范围）----
@@ -379,8 +371,6 @@ fun PracticeHomeScreen(
             }
         }
 
-        // 底栏是浮层、内容穿到它背后（ADR-0010）：尾部为底栏预留空间，最后一张卡不被遮
-        BottomBarTrailingSpacer()
     }
 
     // 题量半模态面板：草稿值随滑块走，确定才写回；与解析面板同一交互语言（ADR-0007）

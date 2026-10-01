@@ -22,7 +22,7 @@ ADR-0005 当年把 `RenderEffect` 高斯模糊列为「可选增强项」推迟�
 
 ## 代价（须知的边界）
 
-1. **内容穿底栏**：玻璃必须有背景可折射，故内容延伸到屏幕底部、穿到底栏背后。这是本决策最大的结构改动——各 tab 屏须用 `rememberBottomBarContentPadding()` 自行留白（`LazyColumn` 走 `contentPadding`，`verticalScroll` 在内容末尾加 `Spacer`；**不能**用外层 padding，否则内容滚不到底栏背后、穿透失效）。二级页（练习会话、批次管理）不显示底栏，须自行避让手势条。
+1. **内容穿底栏**：玻璃必须有背景可折射，故内容延伸到屏幕底部、穿到底栏背后。这是本决策最大的结构改动——各 tab 屏须**为底栏留出底部空间**（现行做法：用 tab 屏外壳 `TabVerticalScrollColumn` / `TabLazyColumn` 自动叠加，见 `docs/conventions/edge-to-edge.md` §底栏穿透；**不能**用外层 padding，否则内容滚不到底栏背后、穿透失效）。二级页（练习会话、批次管理）不显示底栏，须自行避让手势条。
 2. **原生崩溃风险**：库 FAQ 记录过 RenderThread `Fatal signal 11 (SIGSEGV)`。这类崩溃发生在 native 层，**Kotlin/Java 层 `catch` 不住**，因此「自动检测并降级」在技术上不可行。已记入 `pitfalls.md`；崩溃时用户可切回「标准」（设置存于 DataStore，不依赖渲染链路）。触发条件推测与「玻璃叠玻璃」的循环引用有关，本实现只做单层底栏、未使用 `exportedBackdrop`，暂未复现。
 3. **设置页多一项**：底栏效果并入现有「外观」卡，与深色模式同为分段控件。
 4. **玻璃强度不设档位**：不像 IT之家那样给「强/中/弱」多档，取一组调好的固定值（深浅色分别适配）。若日后需要，再加设置项，不改本决策结构。

@@ -2,13 +2,9 @@ package com.baiyin.zhilian.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -37,7 +33,7 @@ import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.isLiquidGlassSupported
 import com.baiyin.zhilian.ui.components.label
-import com.baiyin.zhilian.ui.components.BottomBarTrailingSpacer
+import com.baiyin.zhilian.ui.components.TabVerticalScrollColumn
 import kotlinx.coroutines.launch
 
 /**
@@ -60,11 +56,9 @@ fun SettingsScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var showCleared by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = ZhilianSpacing.screenEdge, vertical = ZhilianSpacing.xl),
+    TabVerticalScrollColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = ZhilianSpacing.screenEdge, vertical = ZhilianSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.lg),
     ) {
         // ---- 外观卡 ----
@@ -167,8 +161,6 @@ fun SettingsScreen(
             }
         }
 
-        // 底栏是浮层、内容穿到它背后（ADR-0010）：尾部为底栏预留空间
-        BottomBarTrailingSpacer()
     }
 
     if (confirmClear) {

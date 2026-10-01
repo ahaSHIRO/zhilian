@@ -220,7 +220,7 @@
 ### 2.17 底栏的 ime 分支是防御性代码，藏着「tab 屏永无输入框」的假设
 
 - **坑**：`ZhilianBottomBar` 内部避让写的是 `windowInsetsPadding(navigationBars ∪ ime)`，但四个 tab 屏都没有文本输入——这个 `ime` 分支**今天恒为 0**，属防御性代码；它成立的隐含前提是「tab 屏永远不会出现输入框」，而这条前提没写在任何地方。
-- **症状**：前提一旦破裂（某个 tab 屏加了搜索框），底栏会被键盘顶到键盘上沿，而该屏的底部留白（`BottomBarTrailingSpacer()` / `rememberBottomBarContentPadding()`）**只算底栏高度 + 手势条、不含 ime**——最后一项正好压进「键盘 + 底栏」那一块，且只有真机弹起键盘再滚到底才看得见。
+- **症状**：前提一旦破裂（某个 tab 屏加了搜索框），底栏会被键盘顶到键盘上沿，而该屏的底部留白（由 tab 屏外壳 `TabVerticalScrollColumn` / `TabLazyColumn` 叠加）**只算底栏高度 + 手势条、不含 ime**——最后一项正好压进「键盘 + 底栏」那一块，且只有真机弹起键盘再滚到底才看得见。
 - **根因**：底部空间有**两个计算者**，各自用的 inset 集合不一致——底栏自己算 `navigationBars ∪ ime`，屏内容只算 `navigationBars`。二者今天数值互不冲突（因为 tab 屏无输入），所以看不出问题。
 - **规避**：给 tab 屏加输入框时**必须两处一起改**——① 该屏底部留白叠加 ime（或改用 `Modifier.imePadding()`）；② 复看底栏被顶起后是否仍符合 ADR-0010 的穿透模型。只改一处会留下「最后一项被遮且在真机才复现」的静默回归。
 
