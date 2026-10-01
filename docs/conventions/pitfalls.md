@@ -224,6 +224,13 @@
 - **根因**：底部空间有**两个计算者**，各自用的 inset 集合不一致——底栏自己算 `navigationBars ∪ ime`，屏内容只算 `navigationBars`。二者今天数值互不冲突（因为 tab 屏无输入），所以看不出问题。
 - **规避**：给 tab 屏加输入框时**必须两处一起改**——① 该屏底部留白叠加 ime（或改用 `Modifier.imePadding()`）；② 复看底栏被顶起后是否仍符合 ADR-0010 的穿透模型。只改一处会留下「最后一项被遮且在真机才复现」的静默回归。
 
+### 2.18 MuMu 的软键盘不占屏，ime 相关行为在模拟器上验不了（假阴性陷阱）
+
+- **坑**：在 MuMu 上用 uiautomator / dumpsys 验「键盘弹起后输入框会不会被遮」——`dumpsys input_method` 明明报 `mInputShown=true mImeWindowVis=3`，看着键盘已经弹出；但 `dumpsys window windows` 里输入法窗口是 `frame=[0,1920][1080,1920]`，**高度为 0**——软键盘根本不占屏。
+- **症状**：`Modifier.imePadding()` 在该环境下永远加 0，键盘弹出前后所有控件坐标**一模一样**。据此得出「键盘避让没问题」是**假阴性**；真机可能完全不是这样（真机有真实键盘高度，才会暴露双重位移、遮住提交按钮等问题）。
+- **判据**（在模拟器上想验 ime 前先自检）：`adb shell dumpsys window windows` 找到 `Window #.*InputMethod` 块，看它的 `Frames: … frame=[x1,y1][x2,y2]`；`y2 - y1 == 0` 就说明这台设备验不了 ime，别浪费时间。
+- **规避**：键盘 / ime 相关行为**一律真机验**（属 AGENTS.md 红线 3 里「模拟器复现不了」的情形）。模拟器上能验的只是「键盘没弹时布局对不对」。
+
 ---
 
 ## 三、工具与流程域
