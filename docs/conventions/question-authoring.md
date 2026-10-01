@@ -278,7 +278,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 4. 词表缺词：向维护者提议（标签 + 理由 + 拟归属分类），扩表后方可使用
 5. 新标签进入词表时同步登记到下表对应分类
 
-### Kotlin（存量 v3，2026-09-30 追认 batch-0006 在用的七个数据流标签并移除零使用的 channel-flow；v2 2026-09-28 自 4 个批次整理，新增通道／数据流／共享状态／测试与调试四类及其标签）
+### Kotlin（存量 v5，2026-10-01 batch-0013 扩「测试&调试」类 `advancetimeby`、`backgroundscope`、`debug-probes`、`test-dispatcher`〔暂缓 runcurrent/advanceuntilidle——与 advancetimeby 同考点强耦合；uncompletedcoroutines——异常类名非知识维度；setmain——未出题不预登记〕；`test-dispatcher` 与协程调度类存量 `unconfined` 是不同身份：`UnconfinedTestDispatcher` 跳 delay 而 `Dispatchers.Unconfined` 不跳，1.10.2 实测差 3000ms vs 2ms；v4 2026-10-01 batch-0012 扩「共享状态」类 `semaphore`、`trylock`，驳回 `withlock`〔语法糖无独立筛选语义〕与 `owner`〔全局语义过泛，将来如需用收敛词形 owner-token 再提〕；v3 2026-09-30 追认 batch-0006 在用的七个数据流标签并移除零使用的 channel-flow；v2 2026-09-28 自 4 个批次整理，新增通道／数据流／共享状态／测试与调试四类及其标签）
 
 | 分类 | 合法标签 |
 |---|---|
@@ -290,8 +290,8 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 | 协程调度 | android、anr、coroutine-start、coroutines、delay、dispatchers、main-thread、suspending-functions、unconfined、undispatched、withcontext |
 | 通道 | channel、capacity、collect、exception |
 | 数据流 | flow、state-flow、shared-flow、replay、flowon、collect、exception、capacity、flow-operators、zip、combine、flatmap、transform、operator-fusion、buffer |
-| 共享状态 | mutex、synchronized |
-| 测试&调试 | runtest、virtual-time、debug-agent、coroutine-name |
+| 共享状态 | mutex、semaphore、synchronized、trylock |
+| 测试&调试 | advancetimeby、backgroundscope、coroutine-name、debug-agent、debug-probes、runtest、test-dispatcher、virtual-time |
 
 \* `basics` 为弱标签（语义过泛），**冻结**——存量题保留，新题不得再使用。
 
