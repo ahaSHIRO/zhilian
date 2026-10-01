@@ -32,6 +32,7 @@
 ## 屏幕级约定
 
 - **一题一屏（练习页）**：整页外层 Column 用 `Modifier.imePadding()` + `windowInsetsPadding(WindowInsets.navigationBars)` 避让键盘与小白条；题卡内部滚动区另加 `windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))`，保证键盘与小白条两种状态下题干与选项都不被遮挡。提交按钮在题卡滚动区内（与题目同屏），不单独固定底部。
+- **键盘避让已真机实测**（2026-10-01，真机 Android 17，键盘高 1083px）：键盘弹出后题卡滚动区底边 = 键盘顶端 − 8dp（外层 `padding(vertical)`），即 `imePadding()` 确实生效；同一时刻应用窗口帧不变、控件绝对坐标与弹出前完全一致 ⇒ **系统没有 pan**。故 `targetSdk 37` + edge-to-edge 强制下 **Manifest 不需要 `windowSoftInputMode`**（Android 15 起 `adjustResize` 已废弃，框架不再给窗口根视图加 padding，IME 只能走 insets）。⚠️ 量键盘高度要看 `dumpsys window` 里的 `InsetsSource … type=ime` 的 `frame`——微信输入法是全高窗口，看输入法窗口自己的 `Frames` 量不出键盘高度（会误判成键盘没弹出）。
 - **列表屏（题库）**：状态栏**不穿透**——外壳已对 NavHost 整体 `padding(top = innerPadding)`，各屏内容一律从状态栏下方开始；屏内只需正常滚动与底部留白。全 App 只有**底栏**是穿透层（见 §底栏穿透）。此前「列表内容滚到状态栏底下制造沉浸感」的表述与实现矛盾，已作废。
 - **解析半模态面板**（ADR-0007）：`ModalBottomSheet` 自带 safeDrawing 处理；面板内内容只需正常滚动，底部留足 padding 即可，不在 content 里再加 `navigationBarsPadding`。
 
