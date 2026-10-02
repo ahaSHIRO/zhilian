@@ -9,7 +9,7 @@ import com.baiyin.zhilian.data.db.QuestionTagRow
  * 错题判定（CONTEXT.md「错题」：有错史且未被连续两次全对消解）。
  * 选题条件与统计弱项共用这**一处**片段，勿两处漂移。
  */
-internal const val SQL_WRONG = "has_ever_wrong = 1 AND consecutive_perfect < 2"
+internal const val SQL_WRONG = "has_ever_wrong = 1 AND consecutive_perfect < ${QuestionEntity.WRONG_THRESHOLD}"
 
 /**
  * 选题条件的 SQL 拼装：纯函数，故「条件对不对」不必插设备就能问。
@@ -34,6 +34,9 @@ internal object PracticeSql {
 
     fun orderBy(sequential: Boolean): String =
         if (sequential) "batch_order, order_in_batch" else "RANDOM()"
+
+    /** 错题条件的完整 WHERE（inactive = 0 AND 错题规则）：统计与选题共用此入口 */
+    fun wrongClause(): String = "inactive = 0 AND $SQL_WRONG"
 }
 
 /**

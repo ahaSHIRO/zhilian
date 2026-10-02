@@ -47,4 +47,9 @@ class PracticeSqlTest {
         assertEquals("batch_order, order_in_batch", PracticeSql.orderBy(sequential = true))
         assertEquals("RANDOM()", PracticeSql.orderBy(sequential = false))
     }
+
+    @Test
+    fun `错题条件的完整 WHERE 单一入口`() {
+        assertEquals("inactive = 0 AND $SQL_WRONG", PracticeSql.wrongClause())
+    }
 }

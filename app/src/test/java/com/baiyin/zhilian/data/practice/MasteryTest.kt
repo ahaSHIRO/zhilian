@@ -1,5 +1,6 @@
 package com.baiyin.zhilian.data.practice
 
+import com.baiyin.zhilian.data.db.QuestionEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -99,4 +100,32 @@ class MasteryTest {
         assertFalse(reset.hasEverWrong && reset.consecutivePerfect < 2) // 不再是错题
         assertEquals(0, reset.consecutivePerfect)
     }
+
+    // ---- 错题规则守卫（ADR-0014）：防 SQL_WRONG 与 isWrong 漂移 ----
+
+    @Test
+    fun is_wrong_four_quadrants() {
+        // hasEverWrong × consecutivePerfect < WRONG_THRESHOLD
+        assertFalse(question(hasEverWrong = false, consecutivePerfect = 0).isWrong)
+        assertTrue(question(hasEverWrong = true, consecutivePerfect = 0).isWrong)
+        assertTrue(question(hasEverWrong = true, consecutivePerfect = 1).isWrong)
+        assertFalse(question(hasEverWrong = true, consecutivePerfect = 2).isWrong) // 连续两次全对消解
+        assertFalse(question(hasEverWrong = false, consecutivePerfect = 2).isWrong)
+    }
+
+    @Test
+    fun sql_wrong_uses_shared_threshold() {
+        // 动态拼接断言：防阈值漂移（改 WRONG_THRESHOLD 两处同步）+ 防 SQL_WRONG 字符串意外改
+        assertEquals(
+            "has_ever_wrong = 1 AND consecutive_perfect < ${QuestionEntity.WRONG_THRESHOLD}",
+            SQL_WRONG,
+        )
+    }
+
+    private fun question(hasEverWrong: Boolean, consecutivePerfect: Int) = QuestionEntity(
+        questionId = "q1", type = "single_choice", subject = "kotlin", category = "协程",
+        tagsJson = "[]", stem = "题干", optionsJson = null, answerJson = "\"A\"",
+        explanation = "解析", sourceJson = "{}", batchOrder = 1, orderInBatch = 0,
+        importedAt = 0L, consecutivePerfect = consecutivePerfect, hasEverWrong = hasEverWrong,
+    )
 }

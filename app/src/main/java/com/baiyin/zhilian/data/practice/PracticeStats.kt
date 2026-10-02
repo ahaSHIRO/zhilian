@@ -24,19 +24,19 @@ class PracticeStats(private val db: ZhilianDatabase) {
     suspend fun multipleChoicePerfectRate() = questionDao.multipleChoicePerfectRate()
     suspend fun averageScoreRate() = questionDao.averageScoreRate()
 
-    // 统计（弱项卡：错题数 + 弱项分类 TOP3；错题条件与 [PracticeSql.where] 共用 SQL_WRONG）
+    // 统计（弱项卡：错题数 + 弱项分类 TOP3；错题条件走 [PracticeSql.wrongClause] 单一入口）
 
     /** 当前错题总数（CONTEXT.md「错题」） */
     suspend fun wrongQuestionCount(): Int =
         questionDao.countRaw(SimpleSQLiteQuery(
-            "SELECT COUNT(*) FROM questions WHERE inactive = 0 AND $SQL_WRONG"
+            "SELECT COUNT(*) FROM questions WHERE ${PracticeSql.wrongClause()}"
         ))
 
     /** 弱项分类 TOP [limit]：当前错题按分类计数，降序取前若干（并列按分类名稳定排序） */
     suspend fun topWrongCategories(limit: Int = 3): List<CategoryWrongRow> =
         questionDao.wrongCategoryRows(SimpleSQLiteQuery(
             "SELECT category, COUNT(*) AS wrong_count FROM questions " +
-                "WHERE inactive = 0 AND $SQL_WRONG " +
+                "WHERE ${PracticeSql.wrongClause()} " +
                 "GROUP BY category ORDER BY wrong_count DESC, category LIMIT $limit"
         ))
 }

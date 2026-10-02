@@ -52,5 +52,10 @@ data class QuestionEntity(
     @ColumnInfo(name = "imported_at") val importedAt: Long,
 ) {
     /** 错题定义（CONTEXT.md）：存在错误作答且未被连续两次全对消解 */
-    val isWrong: Boolean get() = hasEverWrong && consecutivePerfect < 2
+    val isWrong: Boolean get() = hasEverWrong && consecutivePerfect < WRONG_THRESHOLD
+
+    companion object {
+        /** 错题消解阈值（CONTEXT.md「连续两次全对消解」）：SQL 与 Kotlin 两份表达共享此值 */
+        const val WRONG_THRESHOLD = 2
+    }
 }
