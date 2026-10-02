@@ -111,4 +111,32 @@ class SubmissionTest {
         )
         assertEquals(987654321L, plan.record.answeredAt)
     }
+
+    // ---- currentMasteryOf（ADR-0013）----
+
+    @Test
+    fun current_mastery_prefers_loaded_over_snapshot() {
+        val loaded = Mastery(5, true)
+        val q = question(consecutivePerfect = 0, hasEverWrong = false)
+        val result = currentMasteryOf(loaded, q)
+        assertEquals(5, result.consecutivePerfect)
+        assertTrue(result.hasEverWrong)
+    }
+
+    @Test
+    fun current_mastery_falls_back_to_question_snapshot() {
+        val q = question(consecutivePerfect = 3, hasEverWrong = true)
+        val result = currentMasteryOf(null, q)
+        assertEquals(3, result.consecutivePerfect)
+        assertTrue(result.hasEverWrong)
+    }
+
+    @Test
+    fun current_mastery_prefers_db_even_when_snapshot_differs() {
+        // ADR-0004 回归钉子：库内值 ≠ 快照时，必须用库内值（否则基于过期数据转移）
+        val loaded = Mastery(5, true)
+        val q = question(consecutivePerfect = 0, hasEverWrong = false)
+        val result = currentMasteryOf(loaded, q)
+        assertEquals(5, result.consecutivePerfect) // 不是 0
+    }
 }

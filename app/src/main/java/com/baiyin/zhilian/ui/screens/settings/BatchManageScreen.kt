@@ -77,6 +77,12 @@ private suspend fun parseBatch(context: Context, ref: BatchFileRef): BatchFileDt
             ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
     }
 
+/** 读批次文件文本（SAF）：导入用（ADR-0013：SAF 读取留调用方，Service 只收文本） */
+private suspend fun readBatchText(context: Context, uri: Uri): String? =
+    withContext(Dispatchers.IO) {
+        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+    }
+
 /**
  * 批次管理：SAF 授权 Syncthing 批次目录 → 自动/手动扫描待处理批次 → 单个或全部导入 →
  * 结果报告；疑似重复逐条人工决策（README 导入韧性）。
@@ -260,9 +266,12 @@ fun BatchManageScreen(
                                 val results = mutableListOf<Pair<String, ImportOutcome>>()
                                 batches.forEach { sb ->
                                     if (sb.dto != null && !isImported(sb)) {
-                                        val outcome = container.importService.importFromUri(
-                                            Uri.parse(sb.file.key), sb.file.name,
-                                        )
+                                        val text = readBatchText(context, Uri.parse(sb.file.key))
+                                        val outcome = if (text != null) {
+                                            container.importService.importFromText(text, sb.file.name)
+                                        } else {
+                                            ImportOutcome.Failed(null, sb.file.name, "无法读取文件")
+                                        }
                                         results += sb.file.name to outcome
                                     }
                                 }
@@ -335,9 +344,12 @@ fun BatchManageScreen(
                             onClick = {
                                 scope.launch {
                                     busy = true
-                                    importOutcome = container.importService.importFromUri(
-                                        Uri.parse(sb.file.key), sb.file.name,
-                                    )
+                                    val text = readBatchText(context, Uri.parse(sb.file.key))
+                                    importOutcome = if (text != null) {
+                                        container.importService.importFromText(text, sb.file.name)
+                                    } else {
+                                        ImportOutcome.Failed(null, sb.file.name, "无法读取文件")
+                                    }
                                     busy = false
                                 }
                             },

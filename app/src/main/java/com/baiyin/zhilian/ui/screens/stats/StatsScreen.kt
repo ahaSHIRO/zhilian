@@ -53,7 +53,7 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
     val countsFlow = remember(container) {
         combine(
             container.questionBank.observeCount(),
-            container.practiceRepository.observeRecordCount(),
+            container.practiceStats.observeRecordCount(),
         ) { questions, records -> questions to records }
     }
     val counts by countsFlow.collectAsLoadable()
@@ -62,12 +62,12 @@ fun StatsScreen(container: AppContainer, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         aggregates = Loadable.Data(
             StatsAggregates(
-                firstAccuracy = container.practiceRepository.firstAttemptAccuracy(),
-                overall = container.practiceRepository.overallAccuracy(),
-                multiPerfect = container.practiceRepository.multipleChoicePerfectRate(),
-                avgScore = container.practiceRepository.averageScoreRate(),
-                wrongCount = container.practiceRepository.wrongQuestionCount(),
-                topWrong = container.practiceRepository.topWrongCategories(),
+                firstAccuracy = container.practiceStats.firstAttemptAccuracy(),
+                overall = container.practiceStats.overallAccuracy(),
+                multiPerfect = container.practiceStats.multipleChoicePerfectRate(),
+                avgScore = container.practiceStats.averageScoreRate(),
+                wrongCount = container.practiceStats.wrongQuestionCount(),
+                topWrong = container.practiceStats.topWrongCategories(),
             ),
         )
     }

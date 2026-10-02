@@ -1,6 +1,7 @@
 package com.baiyin.zhilian.data.batch
 
 import com.baiyin.zhilian.data.db.QuestionEntity
+import com.baiyin.zhilian.data.db.StemOwnerRow
 import com.baiyin.zhilian.data.question.QuestionContent
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -88,15 +89,27 @@ data class ImportPlan(
     /** 真实校验失败数（issues 含跳过；停用提示走 warnings，不计失败） */
     val failedCount: Int get() = issues.size - skippedCount
 
-    /** 全部落库且无待决重复才算完成，否则部分成功、可重试 */
+    /**
+     * 全部落库且无待决重复才算完成，否则部分成功、可重试。
+     * 判定走 [BatchImportPlanner.batchStatus] 同源纯函数（ADR-0012），不在别处内联。
+     */
     val status: String
-        get() = if (failedCount == 0 && duplicates.isEmpty()) STATUS_IMPORTED else STATUS_PARTIAL
+        get() = BatchImportPlanner.batchStatus(failedCount, duplicates.isNotEmpty())
 
     companion object {
         const val STATUS_IMPORTED = "IMPORTED"
         const val STATUS_PARTIAL = "PARTIAL"
     }
 }
+
+/**
+ * 疑似重复裁决的落库结果（ADR-0012）：新状态 + 已导入数增量。
+ * 窄值对象，不耦合 `ProcessedBatchEntity`——纯函数只需这两个字段回传。
+ */
+internal data class ResolutionOutcome(
+    val newStatus: String,
+    val newImportedCount: Int,
+)
 
 /**
  * 批次导入的应用级校验与规划（batch-spec-v1.md §应用级校验清单 1–8）。
@@ -111,6 +124,77 @@ data class ImportPlan(
  * （见 AppLevelFixturesTest 与 `python tools/batch-check.py --selftest`）。
  */
 object BatchImportPlanner {
+
+    /**
+     * 批次完成态判定（ADR-0012）：**唯一落点**——[ImportPlan.status] 与 [resolveOutcome] 共用同源，
+     * 不在别处内联同一规则。无失败且无待决才算完成，否则部分成功、可重试。
+     *
+     * @param hasPending 是否仍有待决（导入规划期 = 产出待决非空；裁决后 = 剩余待决 > 0）
+     */
+    internal fun batchStatus(failedCount: Int, hasPending: Boolean): String =
+        if (failedCount == 0 && !hasPending) ImportPlan.STATUS_IMPORTED else ImportPlan.STATUS_PARTIAL
+
+    /**
+     * 疑似重复裁决后的落库结果（ADR-0012）：状态升级 + 已导入数增量。
+     *
+     * 规则在此一处；[BatchImportService] 的 `resolveDuplicate` 只做事务与 I/O，按返回值写——
+     * 原先该判定内联在它的事务体里，与 [ImportPlan.status] 双写且判据语义微差
+     * （规划期看「产出待决列表是否空」，裁决后看「剩余计数是否为零」）。
+     *
+     * 入参刻意收窄成原始值而非 `ProcessedBatchEntity`：本函数只读失败数与已导入数两字段，
+     * 窄入参让单测不必构造整个实体（与 `masteryTransition` 收窄值对象同一取舍）。
+     *
+     * @param import 本次裁决是否导入该题（导入则已导入数 +1）
+     * @param remaining 裁决后剩余待决数（> 0 表示批次仍未完成）
+     */
+    internal fun resolveOutcome(
+        failedCount: Int,
+        importedCount: Int,
+        import: Boolean,
+        remaining: Int,
+    ): ResolutionOutcome = ResolutionOutcome(
+        newStatus = batchStatus(failedCount, hasPending = remaining > 0),
+        newImportedCount = if (import) importedCount + 1 else importedCount,
+    )
+
+    /**
+     * 组装 [ImportContext] 快照（ADR-0013）：把 DAO 返回的原始结果收成规划所需的现状快照。
+     *
+     * 纯组装（去重 / 映射）在此一处——若接口直接返回 `Set` / `Map`，这段逻辑就藏进实现、无法纯测。
+     */
+    internal fun buildImportContext(
+        existingIds: List<String>,
+        stemOwners: List<StemOwnerRow>,
+        orderTaken: Boolean,
+    ): ImportContext = ImportContext(
+        existingIds = existingIds.toSet(),
+        stemOwners = stemOwners.associate { it.stem to it.questionId },
+        orderTaken = orderTaken,
+    )
+
+    /**
+     * [ImportPlan] → [ImportOutcome.Completed] 映射（ADR-0013）：字段拷贝与透传。
+     *
+     * 原先内联在 `importFromUri` 的事务体里，与 `resolveDuplicate` 的状态映射手写两处、易漂移。
+     */
+    internal fun toOutcome(
+        plan: ImportPlan,
+        batchId: String,
+        batchOrder: Int,
+        fileName: String,
+    ): ImportOutcome.Completed = ImportOutcome.Completed(
+        batchId = batchId,
+        batchOrder = batchOrder,
+        fileName = fileName,
+        importedCount = plan.toInsert.size,
+        skippedCount = plan.skippedCount,
+        failedCount = plan.failedCount,
+        retiredCount = plan.retiredIds.size,
+        issues = plan.issues,
+        warnings = plan.warnings,
+        duplicates = plan.duplicates,
+        status = plan.status,
+    )
 
     /** 批次级校验（清单 3 前半 / 4 / 6）：null 通过，否则整批拒绝的原因 */
     fun validateBatch(batch: BatchFileDto, orderTaken: Boolean): BatchRejection? {

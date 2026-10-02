@@ -1,5 +1,6 @@
 package com.baiyin.zhilian.data.batch
 
+import com.baiyin.zhilian.data.db.StemOwnerRow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -224,5 +225,108 @@ class BatchImportPlannerTest {
         assertTrue(entity.optionsJson!!.contains("\"optionId\":\"A\""))
         assertTrue(entity.sourceJson.contains("文档"))
         assertEquals("[]", entity.tagsJson)
+    }
+
+    // ---- 完成态判定与裁决结果（ADR-0012）----
+    // resolveDuplicate 的多 DAO 事务原子性靠端到端验证（MuMu），但「裁决 → 状态升级 → 计数增量」
+    // 这步规则现已是可直接问的纯函数——这里把四象限与计数增量钉死，事务体里就只剩读写。
+
+    @Test
+    fun batch_status_is_imported_only_without_failure_and_pending() {
+        // 四象限：仅「无失败 && 无待决」判完成，其余三格一律 PARTIAL
+        assertEquals(ImportPlan.STATUS_IMPORTED, BatchImportPlanner.batchStatus(failedCount = 0, hasPending = false))
+        assertEquals(ImportPlan.STATUS_PARTIAL, BatchImportPlanner.batchStatus(failedCount = 0, hasPending = true))
+        assertEquals(ImportPlan.STATUS_PARTIAL, BatchImportPlanner.batchStatus(failedCount = 1, hasPending = false))
+        assertEquals(ImportPlan.STATUS_PARTIAL, BatchImportPlanner.batchStatus(failedCount = 1, hasPending = true))
+    }
+
+    @Test
+    fun resolve_outcome_importing_last_pending_completes_and_bumps_count() {
+        val outcome = BatchImportPlanner.resolveOutcome(
+            failedCount = 0, importedCount = 2, import = true, remaining = 0,
+        )
+        assertEquals(ImportPlan.STATUS_IMPORTED, outcome.newStatus)
+        assertEquals(3, outcome.newImportedCount)
+    }
+
+    @Test
+    fun resolve_outcome_importing_with_pending_left_stays_partial() {
+        val outcome = BatchImportPlanner.resolveOutcome(
+            failedCount = 0, importedCount = 2, import = true, remaining = 1,
+        )
+        assertEquals(ImportPlan.STATUS_PARTIAL, outcome.newStatus)
+        assertEquals(3, outcome.newImportedCount)
+    }
+
+    @Test
+    fun resolve_outcome_skipping_does_not_bump_imported_count() {
+        val outcome = BatchImportPlanner.resolveOutcome(
+            failedCount = 0, importedCount = 2, import = false, remaining = 0,
+        )
+        assertEquals(ImportPlan.STATUS_IMPORTED, outcome.newStatus)
+        assertEquals(2, outcome.newImportedCount)
+    }
+
+    @Test
+    fun resolve_outcome_skipping_with_pending_left_stays_partial() {
+        val outcome = BatchImportPlanner.resolveOutcome(
+            failedCount = 0, importedCount = 2, import = false, remaining = 1,
+        )
+        assertEquals(ImportPlan.STATUS_PARTIAL, outcome.newStatus)
+        assertEquals(2, outcome.newImportedCount)
+    }
+
+    @Test
+    fun resolve_outcome_never_completes_a_batch_with_failures() {
+        // 有失败时即使待决清空也不升 IMPORTED——原内联实现此处保留 record.status，
+        // 是「有待决却已记 IMPORTED」这类不一致态的潜在漂移点，收口后统一为 PARTIAL
+        val outcome = BatchImportPlanner.resolveOutcome(
+            failedCount = 1, importedCount = 2, import = true, remaining = 0,
+        )
+        assertEquals(ImportPlan.STATUS_PARTIAL, outcome.newStatus)
+        assertEquals(3, outcome.newImportedCount)
+    }
+
+    // ---- buildImportContext / toOutcome（ADR-0013）----
+
+    @Test
+    fun build_import_context_dedupes_and_maps() {
+        val ctx = BatchImportPlanner.buildImportContext(
+            existingIds = listOf("a", "b", "a"), // 去重
+            stemOwners = listOf(
+                StemOwnerRow("id1", "题干1"),
+                StemOwnerRow("id2", "题干2"),
+                StemOwnerRow("id3", "题干1"), // 同题干 → 取后值
+            ),
+            orderTaken = true,
+        )
+        assertEquals(setOf("a", "b"), ctx.existingIds)
+        assertEquals(mapOf("题干1" to "id3", "题干2" to "id2"), ctx.stemOwners)
+        assertTrue(ctx.orderTaken)
+    }
+
+    @Test
+    fun to_outcome_copies_fields_and_transparent_status() {
+        val plan = ImportPlan(
+            toInsert = emptyList(),
+            skippedCount = 1,
+            issues = listOf(BatchIssue("id1", "跳过"), BatchIssue("id2", "失败")), // 2 issue，1 跳过 → failed=1
+            warnings = listOf(BatchIssue("id3", "警告")),
+            duplicates = emptyList(),
+            retiredIds = listOf("old"),
+            missingRetired = listOf("missing"),
+        )
+        val outcome = BatchImportPlanner.toOutcome(plan, "batch-1", 9001, "test.json")
+
+        assertEquals("batch-1", outcome.batchId)
+        assertEquals(9001, outcome.batchOrder)
+        assertEquals("test.json", outcome.fileName)
+        assertEquals(0, outcome.importedCount) // toInsert 空
+        assertEquals(1, outcome.skippedCount)
+        assertEquals(1, outcome.failedCount) // issues.size - skippedCount = 2-1
+        assertEquals(1, outcome.retiredCount)
+        assertEquals(2, outcome.issues.size)
+        assertEquals(1, outcome.warnings.size)
+        assertEquals(ImportPlan.STATUS_PARTIAL, outcome.status) // failedCount>0 → PARTIAL
     }
 }
