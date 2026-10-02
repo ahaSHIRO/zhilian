@@ -90,7 +90,7 @@
 |---|---|---|
 | `ZhilianCard` | `MaterialTheme.shapes.large` | 16dp |
 | `ZhilianOptionRow` | `MaterialTheme.shapes.medium` | 12dp |
-| `ModalBottomSheet` ×3(题量滑块 / 解析面板 / 题目详情) | `extraLarge` **顶角**(2026-10-01 收口) | 20dp,`copy(bottomStart = 0.dp, bottomEnd = 0.dp)`——底部贴屏幕边取 0(与 M3 库默认形态一致);原为 28dp 库默认逃逸,`extraLarge` 槽位自此兑现 |
+| `ModalBottomSheet` ×3(题量滑块 / 解析面板 / 题目详情) | `MaterialTheme.shapes.sheetShape`(派生 token,2026-10-02 收口) | `extraLarge` 顶角 20dp + `copy(bottomStart = 0.dp, bottomEnd = 0.dp)`——底部贴屏幕边取 0(与 M3 库默认形态一致);原为 28dp 库默认逃逸。**配方收口 `Shapes.sheetShape` 扩展属性**(原先三屏一字不差手写) |
 
 代码块圆角沿用库 `LocalMarkdownDimens.current.codeBackgroundCornerSize`,非本项目 token,不在本规范范围。
 

@@ -2,7 +2,6 @@ package com.baiyin.zhilian.ui.screens.practice
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,6 +67,7 @@ import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.components.ZhilianOptionRow
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
+import com.baiyin.zhilian.ui.theme.sheetShape
 import kotlin.random.Random
 import kotlinx.coroutines.launch
 
@@ -249,7 +249,7 @@ fun PracticeSessionScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp 兑现「半模态面板」预留；
             // 底部贴屏幕边取 0（与 M3 库默认形态一致，底部圆角会在屏幕底两角露缝）
-            shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
+            shape = MaterialTheme.shapes.sheetShape,
         ) {
             ExplanationSheet(
                 question = question,

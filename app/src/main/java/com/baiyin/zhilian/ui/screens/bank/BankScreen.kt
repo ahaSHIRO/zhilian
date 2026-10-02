@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +39,7 @@ import com.baiyin.zhilian.ui.components.collectAsLoadable
 import com.baiyin.zhilian.ui.components.TabLazyColumn
 import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
+import com.baiyin.zhilian.ui.theme.sheetShape
 import kotlinx.coroutines.launch
 
 /**
@@ -192,7 +192,7 @@ fun BankScreen(container: AppContainer, modifier: Modifier = Modifier) {
             ModalBottomSheet(
                 onDismissRequest = { detailId = null },
                 // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp，底部贴边取 0
-                shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
+                shape = MaterialTheme.shapes.sheetShape,
             ) {
                 Column(
                     modifier = Modifier

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -41,6 +40,7 @@ import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.components.TabVerticalScrollColumn
 import com.baiyin.zhilian.ui.components.typeLabel
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
+import com.baiyin.zhilian.ui.theme.sheetShape
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -384,7 +384,7 @@ fun PracticeHomeScreen(
         ModalBottomSheet(
             onDismissRequest = { showLimitSheet = false },
             // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp，底部贴边取 0
-            shape = MaterialTheme.shapes.extraLarge.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
+            shape = MaterialTheme.shapes.sheetShape,
         ) {
             Column(
                 modifier = Modifier
