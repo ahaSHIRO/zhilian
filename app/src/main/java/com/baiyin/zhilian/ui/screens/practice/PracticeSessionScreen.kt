@@ -384,27 +384,6 @@ private fun QuestionCard(
     onDoubleTap: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    // 选项打乱：以 questionId 为种子的稳定打乱——同一题在任何会话中顺序一致，
-    // 滑回上题不闪变；字母（optionId）跟内容走，判分与解析引用不受影响
-    val options: List<OptionRow> = remember(question, shuffleOptions) {
-        QuestionContent.options(question.optionsJson)
-            .map { OptionRow(it.optionId, it.text) }
-            .stablyShuffled(shuffleOptions, question.questionId.hashCode())
-    }
-    // 答案解码统一走 QuestionContent：四种题型的分派只此一份（判分/预览/会话共用）
-    val correctOptionIds: Set<String> = remember(question) {
-        QuestionContent.correctOptionIds(question.type, question.answerJson)
-    }
-    val blankAcceptable: List<String> = remember(question) {
-        if (question.type == "fill_in_blank") {
-            QuestionContent.blankAcceptables(question.answerJson)
-        } else {
-            emptyList()
-        }
-    }
-    val trueFalseAnswer: Boolean = remember(question) {
-        question.type == "true_false" && QuestionContent.trueFalseAnswer(question.answerJson)
-    }
     val revealed = result != null
     val canSubmit = PracticeSession.canSubmit(question.type, userAnswer)
 
@@ -441,98 +420,10 @@ private fun QuestionCard(
             QuestionMarkdown(content = question.stem)
 
             when (question.type) {
-                "single_choice" -> {
-                    options.forEach { option ->
-                        val selected = (userAnswer as? UserAnswer.Single)?.optionId == option.optionId
-                        val isCorrect = option.optionId in correctOptionIds
-                        ZhilianOptionRow(
-                            selected = selected,
-                            revealed = revealed,
-                            isCorrect = isCorrect,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (!revealed) Modifier.selectable(selected = selected) {
-                                    onAnswerChange(UserAnswer.Single(option.optionId))
-                                } else Modifier),
-                        ) {
-                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-                "multiple_choice" -> {
-                    options.forEach { option ->
-                        val checked = (userAnswer as? UserAnswer.Multiple)?.optionIds?.contains(option.optionId) == true
-                        val isCorrect = option.optionId in correctOptionIds
-                        ZhilianOptionRow(
-                            selected = checked,
-                            revealed = revealed,
-                            isCorrect = isCorrect,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (!revealed) Modifier.toggleable(value = checked) {
-                                    val current = (userAnswer as? UserAnswer.Multiple)?.optionIds ?: emptySet()
-                                    onAnswerChange(
-                                        UserAnswer.Multiple(
-                                            if (option.optionId in current) current - option.optionId
-                                            else current + option.optionId
-                                        )
-                                    )
-                                } else Modifier),
-                        ) {
-                            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
-                            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-                "true_false" -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap)) {
-                        listOf(
-                            stringResource(R.string.tf_true) to true,
-                            stringResource(R.string.tf_false) to false,
-                        ).forEach { (label, value) ->
-                            val selected = (userAnswer as? UserAnswer.TrueFalse)?.value == value
-                            val isCorrect = revealed && value == trueFalseAnswer
-                            ZhilianOptionRow(
-                                selected = selected,
-                                revealed = revealed,
-                                isCorrect = isCorrect,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .then(if (!revealed) Modifier.selectable(selected = selected) {
-                                        onAnswerChange(UserAnswer.TrueFalse(value))
-                                    } else Modifier),
-                                containerColor = if (selected || isCorrect) {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surface
-                                },
-                            ) {
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(ZhilianSpacing.xs).fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-                "fill_in_blank" -> {
-                    OutlinedTextField(
-                        value = (userAnswer as? UserAnswer.Blank)?.text ?: "",
-                        onValueChange = { onAnswerChange(UserAnswer.Blank(it)) },
-                        enabled = !revealed,
-                        label = { Text(stringResource(R.string.blank_hint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (revealed) {
-                        Text(
-                            stringResource(R.string.blank_acceptable, blankAcceptable.joinToString(" / ")),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                "single_choice" -> SingleChoiceAnswer(question, shuffleOptions, userAnswer, revealed, onAnswerChange)
+                "multiple_choice" -> MultipleChoiceAnswer(question, shuffleOptions, userAnswer, revealed, onAnswerChange)
+                "true_false" -> TrueFalseAnswer(question, userAnswer, revealed, onAnswerChange)
+                "fill_in_blank" -> FillInBlankAnswer(question, userAnswer, revealed, onAnswerChange)
             }
 
             if (isSkipped && !revealed) {
@@ -575,6 +466,160 @@ private fun QuestionCard(
                 }
             }
         }
+    }
+}
+
+/** 单选作答区（自解 options + correctOptionIds） */
+@Composable
+private fun SingleChoiceAnswer(
+    question: QuestionEntity,
+    shuffleOptions: Boolean,
+    userAnswer: UserAnswer?,
+    revealed: Boolean,
+    onAnswerChange: (UserAnswer) -> Unit,
+) {
+    // 选项打乱：以 questionId 为种子的稳定打乱——同一题在任何会话中顺序一致，
+    // 滑回上题不闪变；字母（optionId）跟内容走，判分与解析引用不受影响
+    val options: List<OptionRow> = remember(question, shuffleOptions) {
+        QuestionContent.options(question.optionsJson)
+            .map { OptionRow(it.optionId, it.text) }
+            .stablyShuffled(shuffleOptions, question.questionId.hashCode())
+    }
+    val correctOptionIds: Set<String> = remember(question) {
+        QuestionContent.correctOptionIds(question.type, question.answerJson)
+    }
+    options.forEach { option ->
+        val selected = (userAnswer as? UserAnswer.Single)?.optionId == option.optionId
+        val isCorrect = option.optionId in correctOptionIds
+        ZhilianOptionRow(
+            selected = selected,
+            revealed = revealed,
+            isCorrect = isCorrect,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (!revealed) Modifier.selectable(selected = selected) {
+                    onAnswerChange(UserAnswer.Single(option.optionId))
+                } else Modifier),
+        ) {
+            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+/** 多选作答区（自解 options + correctOptionIds） */
+@Composable
+private fun MultipleChoiceAnswer(
+    question: QuestionEntity,
+    shuffleOptions: Boolean,
+    userAnswer: UserAnswer?,
+    revealed: Boolean,
+    onAnswerChange: (UserAnswer) -> Unit,
+) {
+    val options: List<OptionRow> = remember(question, shuffleOptions) {
+        QuestionContent.options(question.optionsJson)
+            .map { OptionRow(it.optionId, it.text) }
+            .stablyShuffled(shuffleOptions, question.questionId.hashCode())
+    }
+    val correctOptionIds: Set<String> = remember(question) {
+        QuestionContent.correctOptionIds(question.type, question.answerJson)
+    }
+    options.forEach { option ->
+        val checked = (userAnswer as? UserAnswer.Multiple)?.optionIds?.contains(option.optionId) == true
+        val isCorrect = option.optionId in correctOptionIds
+        ZhilianOptionRow(
+            selected = checked,
+            revealed = revealed,
+            isCorrect = isCorrect,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (!revealed) Modifier.toggleable(value = checked) {
+                    val current = (userAnswer as? UserAnswer.Multiple)?.optionIds ?: emptySet()
+                    onAnswerChange(
+                        UserAnswer.Multiple(
+                            if (option.optionId in current) current - option.optionId
+                            else current + option.optionId
+                        )
+                    )
+                } else Modifier),
+        ) {
+            Text("${option.optionId}. ", style = MaterialTheme.typography.titleMedium)
+            QuestionMarkdown(content = option.text, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+/** 判断作答区（自解 trueFalseAnswer） */
+@Composable
+private fun TrueFalseAnswer(
+    question: QuestionEntity,
+    userAnswer: UserAnswer?,
+    revealed: Boolean,
+    onAnswerChange: (UserAnswer) -> Unit,
+) {
+    val trueFalseAnswer: Boolean = remember(question) {
+        question.type == "true_false" && QuestionContent.trueFalseAnswer(question.answerJson)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.stackGap)) {
+        listOf(
+            stringResource(R.string.tf_true) to true,
+            stringResource(R.string.tf_false) to false,
+        ).forEach { (label, value) ->
+            val selected = (userAnswer as? UserAnswer.TrueFalse)?.value == value
+            val isCorrect = revealed && value == trueFalseAnswer
+            ZhilianOptionRow(
+                selected = selected,
+                revealed = revealed,
+                isCorrect = isCorrect,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (!revealed) Modifier.selectable(selected = selected) {
+                        onAnswerChange(UserAnswer.TrueFalse(value))
+                    } else Modifier),
+                containerColor = if (selected || isCorrect) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(ZhilianSpacing.xs).fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/** 填空作答区（自解 blankAcceptable） */
+@Composable
+private fun FillInBlankAnswer(
+    question: QuestionEntity,
+    userAnswer: UserAnswer?,
+    revealed: Boolean,
+    onAnswerChange: (UserAnswer) -> Unit,
+) {
+    val blankAcceptable: List<String> = remember(question) {
+        if (question.type == "fill_in_blank") {
+            QuestionContent.blankAcceptables(question.answerJson)
+        } else {
+            emptyList()
+        }
+    }
+    OutlinedTextField(
+        value = (userAnswer as? UserAnswer.Blank)?.text ?: "",
+        onValueChange = { onAnswerChange(UserAnswer.Blank(it)) },
+        enabled = !revealed,
+        label = { Text(stringResource(R.string.blank_hint)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (revealed) {
+        Text(
+            stringResource(R.string.blank_acceptable, blankAcceptable.joinToString(" / ")),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
