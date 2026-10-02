@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -32,6 +33,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -128,20 +130,8 @@ fun PracticeSessionScreen(
     val pageCount = questions.size + 1
     val pagerState = rememberPagerState(pageCount = { pageCount })
 
-    // 解析面板属当前卡片的瞬时 UI 态，不进状态容器：换题/重建后回到无面板是合理行为
-    var explanationFor by remember { mutableStateOf<Int?>(null) }
-
-    // 面板 state 提到这里：滑题时要先播收起动画再移除——ADR-0007 说的是「自动收起」，
-    // 原先直接置 null 是瞬移消失，与 300ms 的侧滑转场并排看很突兀
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    // 滑到别的题就收起面板：面板属于当前卡片，不跨题保留（ADR-0007）
-    LaunchedEffect(pagerState.currentPage) {
-        if (explanationFor != null) {
-            sheetState.hide()
-            explanationFor = null
-        }
-    }
+    // 解析面板生命周期收口（rememberExplanationSheet）：explanationFor + sheetState + 滑题收面板 + 展开
+    val sheet = rememberExplanationSheet(pagerState)
 
     // 返回手势/按键不在此拦截：面板打开时由 ModalBottomSheet 原生预测返回（跟手下移关闭）
     // 优先消费；面板关闭时返回由 NavHost 接管——侧滑跟手退出会话（ADR-0009），不再弹确认框。
@@ -193,19 +183,26 @@ fun PracticeSessionScreen(
         ) { page ->
             if (page == questions.size) {
                 // 结尾卡统计与会话得分口径见 CONTEXT.md「会话得分」/ [PracticeSession.summary]
-                SummaryCard(
-                    summary = PracticeSession.summary(
+                // remember 按状态变化缓存：重组不重算（原先 pager lambda 内每次重组 filter+toSet）
+                val summary = remember(questions, state.submitted, state.skipped) {
+                    PracticeSession.summary(
                         results = state.submitted.values,
                         questionCount = questions.size,
                         skippedCount = state.skipped.size,
-                    ),
-                    questionCount = questions.size,
-                    firstUnansweredIndex = PracticeSession.firstUnansweredIndex(
+                    )
+                }
+                val firstUnansweredIndex = remember(questions, state.submitted) {
+                    PracticeSession.firstUnansweredIndex(
                         submittedIndices = questions.indices
                             .filter { questions[it].questionId in state.submitted }
                             .toSet(),
                         questionCount = questions.size,
-                    ),
+                    )
+                }
+                SummaryCard(
+                    summary = summary,
+                    questionCount = questions.size,
+                    firstUnansweredIndex = firstUnansweredIndex,
                     onJumpToUnanswered = { index ->
                         scope.launch { pagerState.animateScrollToPage(index) }
                     },
@@ -230,7 +227,7 @@ fun PracticeSessionScreen(
                     },
                     onSkip = { state.skip(questionId) },
                     onDoubleTap = if (state.submitted.containsKey(questionId)) {
-                        { explanationFor = page }
+                        { sheet.onDoubleTap(page) }
                     } else {
                         null
                     },
@@ -240,19 +237,15 @@ fun PracticeSessionScreen(
     }
 
     // 半模态解析面板（ADR-0007）：约六成屏高，可滚动；下拉或点遮罩关闭
-    val sheetPage = explanationFor
+    val sheetPage = sheet.explanationFor
     if (sheetPage != null && sheetPage in questions.indices) {
         val question = questions[sheetPage]
         val result = state.submitted[question.questionId]
         // 双击打开默认全屏（skipPartiallyExpanded=true 跳过半屏档）；
         // 短解析也无半屏露白、专注解析。下拉或点遮罩关闭，滑到下一题自动收起。
-        LaunchedEffect(sheetPage) {
-            sheetState.expand()
-        }
-
         ModalBottomSheet(
-            onDismissRequest = { explanationFor = null },
-            sheetState = sheetState,
+            onDismissRequest = { sheet.onDismiss() },
+            sheetState = sheet.sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
             // 面板圆角走 token 槽位（design-tokens §3.2）：extraLarge=20dp 兑现「半模态面板」预留；
             // 底部贴屏幕边取 0（与 M3 库默认形态一致，底部圆角会在屏幕底两角露缝）
@@ -266,6 +259,49 @@ fun PracticeSessionScreen(
         }
     }
 }
+
+/**
+ * 解析面板生命周期收口（候选 6）：explanationFor + sheetState + 滑题收面板 + 展开。
+ *
+ * 面板是**瞬时 UI 态**（重建后回到无面板是合理行为，ADR-0003），不进状态容器。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberExplanationSheet(pagerState: PagerState): ExplanationSheetState {
+    var explanationFor by remember { mutableStateOf<Int?>(null) }
+    // 面板 state 提到这里：滑题时要先播收起动画再移除——ADR-0007 说的是「自动收起」，
+    // 原先直接置 null 是瞬移消失，与 300ms 的侧滑转场并排看很突兀
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // 滑到别的题就收起面板：面板属于当前卡片，不跨题保留（ADR-0007）
+    LaunchedEffect(pagerState.currentPage) {
+        if (explanationFor != null) {
+            sheetState.hide()
+            explanationFor = null
+        }
+    }
+
+    // 打开面板时展开（双击已提交题卡）
+    LaunchedEffect(explanationFor) {
+        if (explanationFor != null) sheetState.expand()
+    }
+
+    return ExplanationSheetState(
+        explanationFor = explanationFor,
+        sheetState = sheetState,
+        onDoubleTap = { page -> explanationFor = page },
+        onDismiss = { explanationFor = null },
+    )
+}
+
+/** 解析面板的 UI 态（[rememberExplanationSheet] 返回） */
+@OptIn(ExperimentalMaterial3Api::class)
+private data class ExplanationSheetState(
+    val explanationFor: Int?,
+    val sheetState: SheetState,
+    val onDoubleTap: (Int) -> Unit,
+    val onDismiss: () -> Unit,
+)
 
 /** 进程终止重建：会话参数由上一个进程写入（CONTEXT.md「练习会话」不恢复未完成会话） */
 private val SessionLoad.isStale: Boolean
