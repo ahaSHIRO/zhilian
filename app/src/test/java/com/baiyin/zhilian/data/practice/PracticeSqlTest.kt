@@ -1,5 +1,7 @@
 package com.baiyin.zhilian.data.practice
 
+import com.baiyin.zhilian.data.db.sqlEscape
+import com.baiyin.zhilian.data.db.sqlEscapeAll
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,5 +53,22 @@ class PracticeSqlTest {
     @Test
     fun `错题条件的完整 WHERE 单一入口`() {
         assertEquals("inactive = 0 AND $SQL_WRONG", PracticeSql.wrongClause())
+    }
+
+    // ---- SQL 转义单一来源（ADR-0015）----
+
+    @Test
+    fun `单值转义把单引号翻倍`() {
+        assertEquals("'it''s'", sqlEscape("it's"))
+    }
+
+    @Test
+    fun `单值转义无特殊字符时原样包裹`() {
+        assertEquals("'normal'", sqlEscape("normal"))
+    }
+
+    @Test
+    fun `IN 列表转义逐项包裹并拼接`() {
+        assertEquals("'a','it''s'", sqlEscapeAll(setOf("a", "it's")))
     }
 }

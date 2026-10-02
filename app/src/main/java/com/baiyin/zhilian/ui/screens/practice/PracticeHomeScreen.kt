@@ -138,7 +138,7 @@ fun PracticeHomeScreen(
     // 科目与题型列表只随题库变化，取一次即可
     LaunchedEffect(Unit) {
         catalog = Loadable.Data(
-            container.questionPicker.subjects() to container.questionPicker.types(),
+            container.questionBank.subjects() to container.questionBank.types(),
         )
     }
 
@@ -152,7 +152,7 @@ fun PracticeHomeScreen(
     // 分类跟随所选科目：单选科目时显示该科目的分类；未选或多选时显示全部（多选场景下并集更实用）。
     // 科目变化后收窄已有选择，避免出现选中了但看不到的 chip。
     LaunchedEffect(selection.subjects) {
-        val available = container.questionPicker.categories(selection.onlySubject)
+        val available = container.questionBank.categories(selection.onlySubject)
         categories = available
         selection = selection.withCategories(available)
     }
@@ -162,7 +162,7 @@ fun PracticeHomeScreen(
         val fetched = if (selection.categories.isEmpty()) {
             emptyList()
         } else {
-            container.questionPicker.tags(selection.onlySubject, selection.categories)
+            container.questionBank.tags(selection.onlySubject, selection.categories)
         }
         tags = fetched
         // 分类变窄后，已选标签若不在新列表里则清掉，避免留下看不见也关不掉的暗筛选

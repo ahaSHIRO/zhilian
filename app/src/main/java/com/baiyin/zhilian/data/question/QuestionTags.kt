@@ -1,7 +1,6 @@
-package com.baiyin.zhilian.data.practice
+package com.baiyin.zhilian.data.question
 
-import com.baiyin.zhilian.data.batch.BatchJson
-import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 /**
  * 标签解析与命中判定（纯函数，无数据库依赖，便于 JVM 单测）。
@@ -15,7 +14,7 @@ object QuestionTags {
 
     /** 解析标签数组；解析失败视为该行无标签（宁可少命中，不让脏数据带崩练习页） */
     fun decode(tagsJson: String): List<String> = try {
-        BatchJson.json.decodeFromString<List<String>>(tagsJson)
+        Json.decodeFromString<List<String>>(tagsJson)
     } catch (_: Exception) {
         emptyList()
     }

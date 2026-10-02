@@ -4,6 +4,8 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import com.baiyin.zhilian.data.db.QuestionDao
 import com.baiyin.zhilian.data.db.QuestionEntity
 import com.baiyin.zhilian.data.db.QuestionTagRow
+import com.baiyin.zhilian.data.db.sqlEscapeAll
+import com.baiyin.zhilian.data.question.QuestionTags
 
 /**
  * 错题判定（CONTEXT.md「错题」：有错史且未被连续两次全对消解）。
@@ -18,9 +20,8 @@ internal const val SQL_WRONG = "has_ever_wrong = 1 AND consecutive_perfect < ${Q
  */
 internal object PracticeSql {
 
-    /** SQL 字符串常量转义（值来自本机题库 DISTINCT，常量级注入面） */
-    fun quote(values: Set<String>): String =
-        values.joinToString(",") { "'" + it.replace("'", "''") + "'" }
+    /** SQL 字符串常量转义（值来自本机题库 DISTINCT，常量级注入面）；转义规则见 [sqlEscapeAll] */
+    fun quote(values: Set<String>): String = sqlEscapeAll(values)
 
     /** WHERE 子句：维度间取交集（AND），维度内多选取并集（IN） */
     fun where(filter: PracticeFilter): String = buildList {
@@ -83,55 +84,6 @@ class QuestionPicker(private val questionDao: QuestionDao) {
 
     suspend fun favoriteCount(filter: PracticeFilter): Int =
         countMatching(filter.copy(onlyFavorite = true))
-
-    /** 题库中已有的科目（练习配置页科目 chips） */
-    suspend fun subjects(): List<String> =
-        questionDao.rawForStrings(SimpleSQLiteQuery(
-            "SELECT DISTINCT subject FROM questions WHERE inactive = 0 ORDER BY subject"
-        ))
-
-    /**
-     * 给定科目下已有的分类（科目为 null 时返回全部）。
-     * 分类挂在科目下，故按科目取，避免 Java 与 Kotlin 的同名分类混在一起。
-     */
-    suspend fun categories(subject: String?): List<String> {
-        val where = if (subject == null) {
-            "inactive = 0"
-        } else {
-            "inactive = 0 AND subject = '${subject.replace("'", "''")}'"
-        }
-        return questionDao.rawForStrings(SimpleSQLiteQuery(
-            "SELECT DISTINCT category FROM questions WHERE $where ORDER BY category"
-        ))
-    }
-
-    /**
-     * 给定科目与分类下已有的标签，二者任一为空表示不限该层。
-     *
-     * 标签比分类更细（同一科目的分类下常有 launch / async / mutex 等多个主题），
-     * 但存在 JSON 数组列里，取 DISTINCT 必须逐行解析；题库为个人规模，全表扫描可接受。
-     *
-     * 分类这一层不是多余的过滤：全库标签基数远高于分类（18 道题已产出 20+ 个标签），
-     * 不按分类收窄就会把配置页撑成两屏。先选分类、再用标签细筛，才是标签该出现的地方。
-     */
-    suspend fun tags(subject: String?, categories: Set<String>): List<String> {
-        val conditions = mutableListOf("inactive = 0")
-        if (subject != null) conditions += "subject = '${subject.replace("'", "''")}'"
-        if (categories.isNotEmpty()) conditions += "category IN (${PracticeSql.quote(categories)})"
-        return questionDao.rawForStrings(SimpleSQLiteQuery(
-            "SELECT tags_json FROM questions WHERE ${conditions.joinToString(" AND ")}"
-        )).let { QuestionTags.distinct(it) }
-    }
-
-    /** 题库中已有的题型（按固定顺序返回，便于 UI 稳定排布） */
-    suspend fun types(): List<String> {
-        val existing = questionDao.rawForStrings(SimpleSQLiteQuery(
-            "SELECT DISTINCT type FROM questions WHERE inactive = 0"
-        )).toSet()
-        // 固定顺序，UI 不因题库变化而重排
-        return listOf("single_choice", "multiple_choice", "true_false", "fill_in_blank")
-            .filter { it in existing }
-    }
 
     /**
      * 标签筛选的两列投影（SQL 条件不含标签，标签在内存里判；判定见 [QuestionTags]）。

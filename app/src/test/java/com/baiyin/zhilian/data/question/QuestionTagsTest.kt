@@ -1,4 +1,4 @@
-package com.baiyin.zhilian.data.practice
+package com.baiyin.zhilian.data.question
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
