@@ -331,7 +331,12 @@ def main():
             print(f"发现已有批次 {len(existing)} 个（{batches_dir}），核对 batchOrder 与疑似重复")
             validate_against_existing(batch, existing)
         else:
-            print(f"批次目录为空或无 JSON：{batches_dir}")
+            # 2026-10-04：参照批次为 0 曾经是「静默跳过」——交付物放在子目录里时
+            # --batches-dir 指父目录会读不到任何参照批次，却照样打印「通过」，形成假绿灯。
+            warn(f"参照批次为 0：{batches_dir} 下没有 *.json（该目录**不递归**子目录）。"
+                 f"batchOrder 冲突与跨批次疑似重复**本次未核对**；"
+                 f"若交付物在 batch-00XX\\ 子目录里，请先汇到一个扁平目录再用 --batches-dir 指过去")
+            print(f"批次目录为空或无 JSON：{batches_dir}（跨批次核对已跳过）")
     else:
         warn(f"批次目录不存在，跳过与已有批次的核对：{batches_dir}")
 

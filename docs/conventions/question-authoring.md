@@ -49,7 +49,7 @@
 - **变式判定**：与既有同考点题目相比，满足至少一条——①换题型（单选↔判断↔多选↔程序）②换考核角度（语义辨析 ↔ 行为预测 ↔ 错误诊断）③换场景载体。**仅改数字、变量名、措辞顺序的算伪变式，禁止**
 - 同考点变式题须附**一句话差异说明**（换的是什么），随交付物提交，复审时核查；`batch-check.py` 的题干精确查重仍是底线
 - 优先考**反直觉行为、常见误解、易混概念**；不考死记 API 参数
-- 题干含代码用 ```` ```kotlin ```` 围栏；**禁图片**（Schema 拦 `![`）、禁 HTML、禁表格
+- 题干含代码用**围栏代码块并标注语言**（Kotlin 用 `kotlin`、Java 用 `java`——App 按标注做离线高亮，写错或省略会丢高亮）；**禁图片**（Schema 拦 `![`）、禁 HTML、禁表格
 - 题目尽量原创改写，不大段复制来源文本
 - `source` 必须可追溯（标题 + 访问日期 + 链接或笔记路径）
 - `tags` 每题 **1–3 个**，只能选自 §八 词表（新标签须维护者扩表，见 §八）
@@ -117,6 +117,29 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 - **`Dispatchers.Main` 在纯 JVM 上不可用**（`RuntimeException: Stub!`，即使加 android.jar）。涉及 `Main`/`viewModelScope`/`lifecycleScope` 的题，纯 JVM 只能验证逻辑顺序（先用 `Dispatchers.setMain(Dispatchers.Default)`），验证不了真实主线程调度语义；要验真需走模拟器/真机的 instrumented test
 - 中文路径无障碍（已实测），但临时文件建议放英文 temp 目录，且**不要污染项目目录**
 
+#### 进程调用纪律（2026-10-04 新增，防「满屏 java 终端弹窗」）
+
+§二.4 第 3 条要求关键结论**重复运行 10–30 次**，第 1 条要求 stdout/stderr **分流各跑一次**。两条要求都对，
+但**把它们实现成「N 次启动 JVM」会出事**：`java.exe` 是控制台子系统程序，**每次启动 Windows 都新建一个控制台窗口**。
+
+> **2026-10-04 实测事故**：某冷复审脚本写成「6 道题 × 30 轮 × 2 次（`2>$null` 一趟、`2>&1` 再一趟）
+> = **360 次 `java.exe` 启动**」，导致**满屏 java 终端反复弹出**数分钟。
+
+**四条纪律**：
+
+1. **把重复收进一次 JVM**：探针内部 `for (int i = 0; i < 30; i++) { … }`，**一次启动**打印 30 组结果。
+   证据反而更好审——一个文件里就是 30 组对照。
+2. **两条流一次分离**：`java … 1>out.txt 2>err.txt` —— **一次启动**同时得到 stdout、stderr 与退出码。
+   **不要**为了分流把同一段代码跑两遍（这是那次 360 次里 ×2 的来源）。
+3. **确需多次启动时**（例如换不同 `-XX` 开关各跑一遍），用
+   `Start-Process java -ArgumentList … -NoNewWindow -Wait -RedirectStandardOutput out.txt -RedirectStandardError err.txt`
+   —— **`-NoNewWindow` 不新建窗口**。
+4. **长驻探针必须硬性自退**：主循环计数到时限直接 `System.exit(0)`，**不依赖「跑完」**。
+   实测教训：一个 `java -Xmx256m -cp . Probe` 活了约 **10 分钟**，而当时任务书要求 90 秒自退。
+   收尾还要主动确认无残留：`Get-Process java`。
+
+按此换算：360 次启动 → **6 次**。
+
 ### 6. 定稿与投放
 
 验收通过后：
@@ -135,8 +158,11 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 | 内容类型 | 占比 | 说明 |
 |---|---|---|
-| **程序题**（含可独立编译运行的代码） | ≤ 60% | 题干含 ```` ```kotlin ```` 围栏代码块，问输出/行为/异常。可用运行验证，事实性强 |
+| **程序题**（含可独立编译运行的代码） | ≤ 60% | 题干含**标注了语言的**围栏代码块（Kotlin 用 `kotlin`、Java 用 `java`），问输出/行为/异常。可用运行验证，事实性强 |
 | **概念题**（无代码，考原理/辨析/场景） | ≥ 40% | 题干纯文字，考理解而非读代码。无法运行验证，靠复审 + 来源核查把关 |
+
+> **「程序题 / 概念题」的机械口径（2026-10-04 定，权威）**：以**题干是否含围栏代码块**判定——即在 `stem` 中检索围栏起始标记（连续三个反引号），命中即计**程序题**，否则计**概念题**。`tools/bank-stats.py` 的盘面用的就是这个口径，**预校验与验收都以它为准**。
+> 若出题代理按「代码是不是考点主体」另行统计，可能与机械口径差 1–2 题——**允许差异**，但必须在考点清单里**同时写出两个数字与差异原因**（实测例：batch-0020 机械口径 10/20 = 50%、代理自报程序题 40%，差在「代码只作载体、考点是概念」的那两道题上）。**两种口径只要都落在本节比例内，即视为配比达标。**
 
 **概念题的三种形态**（出题时必须落到其中之一，排除"名词背诵型"）：
 
@@ -171,9 +197,22 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 概念题无法运行验证，必须用以下手段把关（出题时标注，复审时核查）：
 
-1. **来源必须引官方文档 URL**（不只引 Obsidian 笔记）——便于复审核实原文
+1. **来源必须指向可独立核实的权威材料**（不只引 Obsidian 笔记）——本条的**目的是可核实**，不是限定必须出自 Oracle 一家。四档见下方「source 四档」
 2. **复审独立复述原理**：复审代理不看答案，独立判断陈述真假，再与出题答案比对
 3. **术语核查**：若选项或解析使用了技术术语，复审须核实该术语在官方源码/文档中真实存在（见 §二.4「复审必查的三类硬伤」第 2 条的方法）
+
+**source 四档（按强度递减，2026-10-04 定，适用全部科目）**
+
+| 档 | 情形 | `source` 怎么写 | 例 |
+|---|---|---|---|
+| ① 官方明写 | 结论就是官方文档的原话 | 引该官方 URL | `ThreadMXBean` 明写「包含虚拟线程的环不会被本方法发现」 |
+| ② **证否型** | 结论是「官方页检索 X 零命中」 | 引**被检索的那个官方页** URL，并在解析里给出**检索词与结论** | 官方类页把 `happens-before` 拼成 `happen-before`（四个类页 `happens-before` 实测 0 次） |
+| ③ **JDK 源码型** | javadoc 零命中，只有源码能证 | 引 OpenJDK 源码位置，并在 `source.title` 或 `note` 里**标明「JDK 源码，非 javadoc」+ 版本号** | JDK 21 的 AQS 已整体重构（`addWaiter`／`SIGNAL`／`PROPAGATE` 在 javadoc 上 0 命中） |
+| ④ 一手文献型 | 源头是论文／教科书 | 引书目（含年份，有 DOI 更好），**不得冒充官方出处** | 死锁四条件 = Coffman, Elphick & Shoshani, *System Deadlocks*, ACM Computing Surveys 3(2), 1971 |
+
+- **社区来源（博客／教程站／聚合站）不得替代 ①–④**，只能作交叉验证，且**不得**作为正面考点的唯一来源。引 URL 前**必须亲自读过该页**（搜索摘要不是来源）。
+- **版本纪律**：③ 档必须带版本（如「JDK 21.0.9」）。已有实测教训：`synchronized` 的 pinning 在 **JDK 24 由 JEP 491 修掉**，不标版本即为错题。
+- 凡「官方根本没这么说」的结论，按 ② 或 ④ 记录**真实来源**，不得挂 Oracle 名下（反面写法见 §二.4 第 2 条）。
 
 ### 逐题自查
 
@@ -182,7 +221,7 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 - [ ] 答案唯一无歧义（多选尤其：不能有"少选也对"的灰区）
 - [ ] 干扰项长度风格一致，不泄漏答案，无"两个都对"
 - [ ] 解析必写部分齐全（为什么对 + 为什么错），按需部分不灌水
-- [ ] 来源真实、访问日期正确、与题目相关；概念题必须引官方文档 URL
+- [ ] 来源真实、访问日期正确、与题目相关；概念题的 `source` 指向**可独立核实的权威材料**（官方文档 / JDK 源码 / 一手文献，四档见 §三「source 四档」；社区来源只能作交叉验证）
 - [ ] 分类用词与 §五 一致；tags 每题 1–3 个且全部选自 §八 词表
 - [ ] 含代码者，代码自包含且**已实际运行核验**
 
@@ -222,14 +261,19 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 ### Java
 
-按需追加。建议分类：基础语法、集合框架、并发编程、IO、面向对象、常用接口。
+按需追加。建议分类：基础语法、集合框架、**内存与引用**、并发编程、IO、面向对象、常用接口。
+
+> 「内存与引用」2026-10-04 依素材库 `Java\01-内存与引用\`（GC 算法与回收器、四大引用、JVM 内存模型、直接内存与堆外内存、JVM 内存诊断、WeakHashMap，6 篇）登记：原建议分类缺此项，而该章整章未开采。分类一次定死，出首批前先登记。
+> 「集合框架」暂不单独立类——素材把集合内容放在 `Java\05-常用接口\`（集合底层、List/Set/Map/Queue/Deque、Comparable/Comparator），待出到该章再定，以遵循下文「不要一次铺开只有少量题的空分类」。
+
+**推进路线（2026-10-04 定）**：Kotlin 素材已产出完毕（`Kotlin\01-协程\` 12 篇考点笔记全部成批，题库 kotlin 164 题），后续转向 **Java**，按素材章节顺序推进，起手 `Java\01-内存与引用\`；ArkTS 暂缓（见 §六、§八）。Java 已开「基础语法」（batch-0008）与「并发编程」（batch-0017）两类。注意 Java 素材的**面试角度**已被 batch-0009/0010 消耗一轮（计入 `interview` 科目），语言学习角度仍近空白，二者可对同一笔记分别出题（§九）。
 
 后续按需追加科目（扩科目须改 Schema `subject` 枚举，见 §六）。**不要一次铺开只有少量题的空分类**——练习配置页的分类 chips 每行 3 个，分类多而空会让筛选区变长且无用。
 
 ## 六、硬约束速查（违反必被拒）
 
 - 首版**只追加**：不原位覆盖、不物理删除。修订 = **新 questionId**，旧题走 `retiredQuestionIds` 停用，且**停用不可恢复**
-- `subject` 枚举当前为 `kotlin`、`java` 与 `arkts`（ArkTS 为占位，暂无素材与题）；要扩其他科目须改 Schema 与 App 侧适配
+- `subject` 枚举当前为 `kotlin`、`java` 与 `arkts`（ArkTS 为占位，题库暂无题；**素材库已有 20 篇 ArkTS 笔记**，2026-10-04 核，按既定路线暂缓）；要扩其他科目须改 Schema 与 App 侧适配
 - 每批 `questions` **1–200** 题（Schema 上限）；**批次规模常态 10–20 题**（常规单元 10–15、核心单元 15–20，见 §二.1），不足 10 须在考点清单说明理由
 - `batchOrder` **1–9999** 且不得与已导入批次重复
 - 顶层 `additionalProperties: false`——**任何未定义字段都会导致整批校验失败**
@@ -242,14 +286,14 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 **环境与能力**：本机新会话，可读本仓库全部文件，可运行 `python` 与 §二.5 的 Kotlin 运行验证（本机路径对你可用）。
 
-**素材供给**：素材由维护者**每批指定**（Obsidian 笔记内容或菜鸟教程页面），出题代理不得自行选取网络来源。素材是菜鸟教程时，概念题的 `source` **仍必须引官方文档 URL**——菜鸟教程只作为理解素材，不作为事实权威，可与官方 URL 并列附上。
+**素材供给**：素材由维护者**每批指定**（Obsidian 笔记内容或菜鸟教程页面），出题代理不得自行选取网络来源。素材是菜鸟教程时，概念题的 `source` **仍必须指向可独立核实的权威材料**（四档见 §三「source 四档」）——菜鸟教程只作为理解素材，不作为事实权威，可与权威出处并列附上。
 
 **必须自跑**（产出随批次一并交付）：
 1. §二.3 `batch-check.py` 预校验，附**通过输出**（0 错误）
 2. 代码题的 §二.5 运行验证，附实际运行结果（含 §二.4「复审必查的三类硬伤」第 1 条的 stdout/stderr 分流与稳定性实测）
 3. 冷复审（执行方式见下方「子代理协议」）
 
-**冷复审的执行（子代理协议）**：出题代理**必须在交付前完成冷复审**，方式按环境二选一：
+**冷复审的执行（子代理协议）**：出题代理**必须在交付前完成冷复审**，方式按环境**三选一**：
 
 1. **派生独立上下文的子代理**（环境支持时优先）：
    - 复审提示词**机械化拼装**，只允许包含两部分：①剥敏题目（题干、选项、题型；**剥离** `answer`、`acceptableAnswers`、`explanation`、`source`）②本文 §二.4 的复审任务描述与裁决模板**原文**
@@ -258,6 +302,13 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
    - **复审完整输出与所用提示词原样随批次交付**，维护者据此审计；发现泄漏答案或引导措辞，整批退回
    - REVISE 返工后可再派新一轮复审直至 PASS；与复审各执一词时按 §二.4 升级（换模型重审 / 运行验证加码 / 交维护者裁）
 2. **声明弃权**：环境不支持派生子代理时，交付物中明确声明"未复审"，由维护者另起会话执行 §二.4
+3. **零上下文继承的独立执行**（2026-10-04 新增，供部署不支持派生时用）：本部署的 `maxDepth=1` 使出题代理**无法**再派 subagent，此时可用任何**不继承出题上下文**的独立通道（`workflow` 工具、任务看板会话、另起新会话），但须满足：
+   - 复审方同样只拿到 ①剥敏题目 ②§二.4 原文，**独立性的实质要求不变**
+   - 交付物中**写明所用机制**（走哪条通道、上下文是否零继承），供维护者审计
+   - 与路径 1 同等承担"完整输出与提示词原样交付"的义务
+
+> **落盘纪律（2026-10-04 新增）**：复审的**每一轮**提示词与裁决输出都必须落在**交付目录**（`batch-XXXX\`）里，**不得只留在系统 temp**——temp 会被清理，而"原样交付"是 §七 的硬要求。
+> 已发生的教训：**batch-0020 第 1–7 轮的完整裁决随 temp 清理丢失**，仅存摘要 + SHA，§七 对该批未完全满足（代理已如实登记，维护者接受本次，但机制必须堵住）。
 
 **禁止**：
 - **跳过或伪造冷复审**——交付物缺复审记录视为未复审，提示词泄漏答案或含引导措辞整批退回
@@ -295,16 +346,17 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 \* `basics` 为弱标签（语义过泛），**冻结**——存量题保留，新题不得再使用。
 
-### Java（存量 v2，2026-10-01 batch-0017 新增「并发编程」类 `thread`、`thread-state`、`interrupt`、`volatile`、`visibility`、`happens-before`、`atomicity`、`daemon-thread`、`jmm`〔自驳候选存档：`synchronized`——与 Kotlin 词表同名且本批未出题，将来出互斥语义题再提；`monitor-lock`——并入 thread-state 的 BLOCKED 语义；`visibility-model`/`memory-visibility`——visibility 同义变体；`thread-lifecycle`——与 thread 重叠；`atomic`——与 atomicity 去后缀变体；`volatile-ordering`——volatile+jmm 组合可表达〕；v1 2026-09-29 自 batch-0008 建档）
+### Java（存量 v4，2026-10-04 两次扩表合并登记：batch-0019~0022 扩「内存与引用」类 32 个标签，batch-0023~0026 扩「并发编程」类 29 个标签〔原有 9 个保留不动，末尾追加〕。跨科目同名复用（按 §八 既有裁定，标签筛选按 subject 隔离、不串味）：`gc`、`lock`、`concurrency` 与 interview 词表同名，`semaphore` 与 Kotlin 词表同名。**`jmm` 只指 Java 内存模型（并发、happens-before），属「并发编程」类；运行时数据区一律用 `runtime-data-area`**。跨批共用标签**拼写须完全一致**：`gc-root`（batch-0020/0021）、`spurious-wakeup`（batch-0023/0026）、`cas`／`fairness`／`reentrantlock`／`barging`／`timeout`（batch-0025/0026）。**禁造形态变体清单见 §十**（词表外写法一律拦截）；v3 2026-10-04 batch-0019~0022 扩「内存与引用」类 32 个标签；v2 2026-10-01 batch-0017 新增「并发编程」类 `thread`、`thread-state`、`interrupt`、`volatile`、`visibility`、`happens-before`、`atomicity`、`daemon-thread`、`jmm`〔自驳候选存档：`synchronized`——与 Kotlin 词表同名且本批未出题，将来出互斥语义题再提；`monitor-lock`——并入 thread-state 的 BLOCKED 语义；`visibility-model`/`memory-visibility`——visibility 同义变体；`thread-lifecycle`——与 thread 重叠；`atomic`——与 atomicity 去后缀变体；`volatile-ordering`——volatile+jmm 组合可表达〕；v1 2026-09-29 自 batch-0008 建档）
 
 | 分类 | 合法标签 |
 |---|---|
 | 基础语法 | bitwise、shift、complement |
-| 并发编程 | thread、thread-state、interrupt、volatile、visibility、happens-before、atomicity、daemon-thread、jmm |
+| 并发编程 | thread、thread-state、interrupt、volatile、visibility、happens-before、atomicity、daemon-thread、jmm、process、concurrency、sync-async、wait-notify、spurious-wakeup、runnable、callable、executor、future、futuretask、completablefuture、pessimistic-lock、optimistic-lock、optimistic-read、cas、stampedlock、lock、readwritelock、reentrantlock、fairness、countdownlatch、cyclicbarrier、semaphore、phaser、barging、timeout、aqs、condition、tryacquire |
+| 内存与引用 | runtime-data-area、heap、stack、stack-overflow、metaspace、outofmemoryerror、direct-memory、maxdirectmemorysize、cleaner、bytebuffer、gc、generational、collector、g1、zgc、stop-the-world、gc-log、system-gc、gc-root、reachability、memory-leak、reference-chain、weak-reference、weakhashmap、referencequeue、implicit-reference、jcmd、jmap、jstat、heap-dump、nmt、mxbean |
 
 ### ArkTS
 
-暂无存量。首个 ArkTS 批次出题时，由出题代理按增量规则提议、维护者扩表建档。
+标签暂无存量。**素材库已有 20 篇 ArkTS 笔记（2026-10-04 核，约 190 KB：MVVM、RDB、Navigation、循环家族、AppStorageV2/PersistenceV2、Map/Location Kit、atManager、Emitter、fileIo 等）**——旧说法「暂无素材与题」中的「暂无素材」已作废，「暂无题」仍成立。按 2026-10-04 定下的路线 **ArkTS 暂缓**；解禁后首个批次由出题代理按增量规则提议、维护者扩表建档。
 
 ### 面试（subject: interview，存量 v1，2026-09-29 自 batch-0009 建档）
 
@@ -332,3 +384,79 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 2. **解析 = 面试答题要点**：教材式五段结构不变，「为什么对」的内容即面试官想听到的答案要点；「变体提示」可写面试追问方向。
 3. **标注原题干变体**：每道拆出题的解析首段须标注来源，格式：`**由面试原题「〈原题干〉」（〈基础面试题/常见面试题〉）拆出。**`——刷题时可对回原题，复习按面试原题串联。
 4. **跨科目重叠不受变式规则约束**：面试科目与 kotlin/java 科目的同名知识点（如 ArrayList 扩容）是独立身份，无需变式设计；但题干雷同仍由 batch-check 拦截（疑似重复警告），拆题时须重述措辞。
+
+## 十、标签禁造形态变体（词表外写法一律拦截）
+
+§八 的表格是**唯一合法词表**（`tools/vocab.py` 按该节解析）。本节是**治理参考**：下列写法在两个方向上都不可用——① 它们不在 §八 里，`tools/batch-check.py` 会机械拦截；② 即便登记，同一概念的多个词形也会分裂筛选 chip（§八 增量规则 3）。
+
+> **位置约定（重要，别把本节内容挪进 §八）**：`vocab.py` 解析 §八 时会读取**该节内所有表格行**的第 2 列。把本节的禁造表放进 §八，会被当成标签解析出垃圾条目——2026-10-04 实测：插入一张 `| 禁写 | 正确词形 |` 表后，java 词表凭空多出 `` `runtime-data-area` ``、`正确词形` 等项。所以本节刻意放在 §八 **之外**。
+
+### 通用反例
+
+- **单复数**：同一概念只留一个词形，复数形一律不建
+- **缩写与全称**：`stw` → `stop-the-world`；但 `nmt` 反过来保留缩写（更常用），禁 `native-memory-tracking`
+- **去/加连字符**：`gcroot`、`heapdump`、`stamped-lock` 一律非法
+- **API 名照抄小写**：`weakhashmap`、`completablefuture`、`maxdirectmemorysize`（同 `withcontext`、`advancetimeby` 先例），不加连字符
+
+### Java · 内存与引用（batch-0019~0022）
+
+| 禁写 | 正确词形 |
+|---|---|
+| `memory-model`、`memorymodel`、`jvm-memory-model` | `runtime-data-area` |
+| `off-heap`、`directbuffer`、`direct-buffer`、`offheap` | `direct-memory` |
+| `generation` | `generational` |
+| `gcroot`、`gc-roots` | `gc-root` |
+| `stw` | `stop-the-world` |
+| `weakref`、`weakreference` | `weak-reference` |
+| `weak-map`、`weak-hash-map` | `weakhashmap` |
+| `reference-queue` | `referencequeue` |
+| `oom`、`heap-oom` | `outofmemoryerror` |
+| `leak` | `memory-leak` |
+| `heapdump` | `heap-dump` |
+| `native-memory-tracking` | `nmt` |
+| `max-direct-memory-size` | `maxdirectmemorysize` |
+| `mx-bean` | `mxbean` |
+| `diagnostics`、`jvm-diagnostics` | 用具体工具名 `jcmd`／`jmap`／`jstat` |
+
+### Java · 并发编程（batch-0023~0026 新增部分）
+
+| 禁写 | 正确词形 |
+|---|---|
+| `synchronous-asynchronous`、单独用 `sync`／`async` | `sync-async` |
+| 把 `wait`／`notify`／`notifyall` 拆开 | `wait-notify` |
+| `spurious-wakeups` | `spurious-wakeup` |
+| `process-thread` | `process` 与 `thread` 两个标签 |
+| `concurrent`、`concurrent-programming` | `concurrency` |
+| `executors`、`executor-service`、`executorservice` | `executor` |
+| `future-task` | `futuretask` |
+| `completable-future`、`completion-stage`、`cf` | `completablefuture` |
+| `runnable-task`、`callable-task` | `runnable`／`callable` |
+| 单独用 `pessimistic`／`optimistic` | `pessimistic-lock`／`optimistic-lock` |
+| `optimistic-reading` | `optimistic-read` |
+| `compare-and-swap`、`compareandset` | `cas` |
+| `stamped-lock`、`stamp-lock` | `stampedlock` |
+| `rwlock`、`read-write-lock` | `readwritelock` |
+| `reentrant-lock`、`rlock` | `reentrantlock` |
+| `fair`、`fair-lock`、`fair-mode` | `fairness` |
+| `latch`、`count-down-latch`、`cdl` | `countdownlatch` |
+| `barrier`、`cyclic-barrier`、`cb` | `cyclicbarrier` |
+| `phasor`、`phasers`（单复数） | `phaser` |
+| `semaphores`（单复数） | `semaphore` |
+| `barge`、`barging-in` | `barging` |
+| `timeouts`、`time-out`、`timed-wait` | `timeout` |
+| `synchronizer`、`sync-tool`、`sync-tools` | 用具体类名或 `aqs` |
+| `abstractqueuedsynchronizer`、`abstract-queued-synchronizer`、`a-q-s` | `aqs` |
+| `try-acquire`、`tryacquireshared`、`try-acquire-shared` | `tryacquire` |
+| `condition-variable`、`condition-queue`、单独用 `await`／`signal` | `condition` |
+| `clh`、`clh-queue`、`node`、`aqs-node`、`park`、`unpark` | 挂 `aqs` |
+
+### 易与既有标签混淆者（**不是变体，是身份不同**）
+
+| 标签 | 区别 |
+|---|---|
+| `async`（**Kotlin** 词表，协程构建器） | **不得**在 java 侧表示「异步」——java 侧用 `sync-async`。这不是跨科目同名复用，是**不同身份** |
+| `jmm`（并发语义） | 与「JVM 运行时数据区」无关；后者用 `runtime-data-area`。中文名只差一个词，是本库记录在案的同名陷阱 |
+| `atomicity`（JLS 术语语义） | 与 `cas`（原子类／乐观锁策略）是不同身份 |
+| `happens-before`（语义） | 与「官方类页把这个词**拼错**成 `happen-before`」这件**事实**不同——拼写事实题挂对应类标签（如 `countdownlatch`） |
+| `thread`（线程本身） | 与 `runnable`／`callable`（任务形态）是不同身份 |
+| `lock`（接口层契约） | 与 `reentrantlock`／`readwritelock`（具体类）是不同身份 |
