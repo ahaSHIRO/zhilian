@@ -124,13 +124,14 @@ java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFo
 
 最省事方式（免建 jar，同为约 4 秒）：`kotlin -cp $CO <脚本>.kts`
 
-**编译器版本锁定项目版本 2.4.20**。PATH 上的 `kotlinc` 是 2.3.10，与项目不一致；涉及版本语义的题需改用缓存中的 `kotlin-compiler-embeddable-2.4.20.jar`（走 preloader 直调编译器，绕过 bat）。
+**编译器版本**：PATH 上的 `kotlinc` 是 **2.3.10**，项目声明的是 `kotlin = "2.4.20"`（`gradle/libs.versions.toml`）。用 2.3.10 验证大多数语义没问题，但**涉及版本语义的题必须对齐题面版本**。2026-10-05 实测更正：本机 Gradle 缓存里**只有** `kotlin-compiler-embeddable-2.2.21.jar` 与 `2.3.21.jar`，**没有 2.4.20**（本节原写的「改用缓存中的 `kotlin-compiler-embeddable-2.4.20.jar`」已不成立）；确需 2.4.20 时先下载 `org.jetbrains.kotlin:kotlin-compiler-embeddable:2.4.20`，再走 preloader 直调编译器（绕开 bat）。
 
 已知坑（实测）：
 
 - **`kotlinc.bat` / `kotlin.bat` 遇多 jar 分号 classpath 会崩**（bat 剥引号后 cmd 把 `;` 当命令分隔符，后续 jar 被当源文件）。解法：①把 jar 合并成一个胖 jar（`jar xf` 后重新 `jar cf`）；②绕过 bat，直接
   `java -cp "<AS>\plugins\Kotlin\kotlinc\lib\kotlin-preloader.jar" org.jetbrains.kotlin.preloading.Preloader -cp "<AS>\...\kotlin-compiler.jar" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler Demo.kt -cp "<依赖>" -d out`
 - **pwsh 里 `;` 是语句分隔符**，`-cp $a;$b` 会语法报错 → 命令写进 `.ps1`/`.kts`
+- **`-include-runtime` 会把 `kotlin-reflect` 一起打进可执行 jar**（2026-10-05 实测 2.3.10：打出的 jar **5158 KB**、含 **2196** 个 `kotlin/reflect/jvm/` 条目）。要验证「classpath 上缺 `kotlin-reflect`」这类断言，**不能用 `-include-runtime`**：应 `kotlinc <src> -d <dir>` 后用**仅 kotlin-stdlib** 的 classpath 运行，否则会得到「缺库也照常工作」的**假阴性**——本轮实测差点据此把一条正确的题目结论（缺 reflect 时 `sealedSubclasses` 抛 `KotlinReflectionNotSupportedError`）报成错。
 - **`Dispatchers.Main` 在纯 JVM 上不可用**（`RuntimeException: Stub!`，即使加 android.jar）。涉及 `Main`/`viewModelScope`/`lifecycleScope` 的题，纯 JVM 只能验证逻辑顺序（先用 `Dispatchers.setMain(Dispatchers.Default)`），验证不了真实主线程调度语义；要验真需走模拟器/真机的 instrumented test
 - 中文路径无障碍（已实测），但临时文件建议放英文 temp 目录，且**不要污染项目目录**
 
