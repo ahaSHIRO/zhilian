@@ -81,17 +81,19 @@ def cmd_dump(a) -> int:
 def cmd_count(a) -> int:
     text = read_text(a.file)
     lines = text.split("\n")
+    flags = 0 if a.case_sensitive else re.I
     print(f"文件: {a.file}")
-    print(f"总字符 {len(text)}   总行 {len(lines)}")
+    print(f"总字符 {len(text)}   总行 {len(lines)}   大小写："
+          f"{'敏感' if a.case_sensitive else '不敏感（加 -c 改用敏感；全大写标识符如 SIGNAL 别用默认值）'}")
     print("=" * 88)
     for p in a.patterns:
-        hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if re.search(p, ln, re.I)]
+        hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if re.search(p, ln, flags)]
         print(f"{p!r:<46} 命中 {len(hits)}")
         for i, ln in hits[: a.samples]:
             print(f"    L{i}: {ln[:150]}")
         print("-" * 88)
     if a.control:
-        n = len(re.findall(a.control, text, re.I))
+        n = len(re.findall(a.control, text, flags))
         print(f"对照词 {a.control!r} 命中 {n}   （>0 才算本次检索协议有效）")
         if n == 0:
             print("  !!! 对照词也 0 命中 ⇒ 是抓取/检索失败，不是「官方没写」——结论作废")
@@ -101,16 +103,18 @@ def cmd_count(a) -> int:
 
 def cmd_grep(a) -> int:
     text = read_text(a.file)
-    print(f"文件: {a.file}  去标签后字符数: {len(text)}")
+    flags = 0 if a.case_sensitive else re.I
+    print(f"文件: {a.file}  去标签后字符数: {len(text)}   大小写："
+          f"{'敏感' if a.case_sensitive else '不敏感（加 -c 改用敏感）'}")
     print(f"主正则: {a.pattern}")
-    ms = list(re.finditer(a.pattern, text, re.I))
+    ms = list(re.finditer(a.pattern, text, flags))
     print(f"主正则命中数: {len(ms)}")
     for k, m in enumerate(ms, 1):
         s, e = max(0, m.start() - a.window), min(len(text), m.end() + a.window)
         print("-" * 90)
         print(f"[命中 {k}] ...{text[s:e]}...")
     if a.control:
-        am = list(re.finditer(a.control, text, re.I))
+        am = list(re.finditer(a.control, text, flags))
         print("=" * 90)
         print(f"对照词 {a.control!r} 命中 {len(am)}   （>0 才算本次检索协议有效）")
         for k, m in enumerate(am[:5], 1):
@@ -135,6 +139,8 @@ def main() -> int:
     c.add_argument("file")
     c.add_argument("patterns", nargs="+")
     c.add_argument("--samples", type=int, default=3)
+    c.add_argument("-c", "--case-sensitive", action="store_true",
+                   help="区分大小写（查 SIGNAL 这类全大写标识符时必须加）")
     c.add_argument("--control", default=None, help="对照词（必然命中）；0 命中则判本次检索无效")
     c.set_defaults(func=cmd_count)
 
@@ -142,6 +148,7 @@ def main() -> int:
     g.add_argument("file")
     g.add_argument("pattern")
     g.add_argument("--window", type=int, default=300)
+    g.add_argument("-c", "--case-sensitive", action="store_true", help="区分大小写")
     g.add_argument("--control", default=None, help="对照词（必然命中）；0 命中则判本次检索无效")
     g.set_defaults(func=cmd_grep)
 
