@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 批次导入规划单测（batch-spec-v1.md §应用级校验清单 1–8）。
+ * 批次导入规划单测（batch-spec-v1.md §应用级校验清单 1–9）。
  *
  * 这是本仓此前覆盖率为零、爆炸半径最大的一块：导入出错要么整批被拒、要么静默跳题。
  * 规则抽成纯模块后，清单里的每一条都能在这里钉死，不必插一台真机。
@@ -117,8 +117,24 @@ class BatchImportPlannerTest {
 
     @Test
     fun question_accepts_multiple_choice_with_known_options() {
-        val ok = q(type = "multiple_choice", answer = JsonArray(listOf(JsonPrimitive("A"), JsonPrimitive("B"))))
+        // 清单 9 要求多选不得覆盖全部选项，故这里给 3 个选项、只选其中 2 个
+        val ok = q(
+            type = "multiple_choice",
+            options = listOf(OptionDto("A", "甲"), OptionDto("B", "乙"), OptionDto("C", "丙")),
+            answer = JsonArray(listOf(JsonPrimitive("A"), JsonPrimitive("B"))),
+        )
         assertNull(BatchImportPlanner.validateQuestion(ok))
+    }
+
+    @Test
+    fun question_rejects_multiple_choice_covering_all_options() {
+        // 清单 9：全选题没有区分度（batch-0024 第 7 题的答案键缺陷正是此形）
+        val all = q(
+            type = "multiple_choice",
+            answer = JsonArray(listOf(JsonPrimitive("A"), JsonPrimitive("B"))),
+        )
+        val rejection = BatchImportPlanner.validateQuestion(all)
+        assertEquals(BatchRules.ANSWER_NOT_ALL_OPTIONS, rejection?.rule)
     }
 
     // ---- 规划：清单 3 后半 / 8 ----

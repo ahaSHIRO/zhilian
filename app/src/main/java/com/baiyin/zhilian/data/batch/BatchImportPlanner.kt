@@ -52,6 +52,9 @@ object BatchRules {
     /** 8：疑似重复（题干归一化后与本机某题相同且 ID 不同） */
     const val SUSPECTED_DUPLICATE = 8
 
+    /** 9：多选题的 `answer` 不得覆盖全部选项（全选题没有区分度） */
+    const val ANSWER_NOT_ALL_OPTIONS = 9
+
     /** 0：清单之外、只有一端实现的补充检查（不该出现在共同夹具里） */
     const val EXTRA = 0
 }
@@ -112,7 +115,7 @@ internal data class ResolutionOutcome(
 )
 
 /**
- * 批次导入的应用级校验与规划（batch-spec-v1.md §应用级校验清单 1–8）。
+ * 批次导入的应用级校验与规划（batch-spec-v1.md §应用级校验清单 1–9）。
  *
  * 纯模块：输入是批次 DTO + 库内现状快照 + 时间戳，输出是导入计划。
  * 文件读取、Schema 校验与事务写入都留在适配器（[BatchImportService]）里，
@@ -244,6 +247,14 @@ object BatchImportPlanner {
                 return BatchRejection(
                     BatchRules.ANSWER_REFERENCES_OPTION,
                     "答案引用了不存在的选项 $unknown",
+                )
+            }
+            // 清单 9：多选题的 answer 不得覆盖全部选项（全选题没有区分度；实测该形态正是
+            // 「解析已判定某项不入选、答案键却把它收进来」这类矛盾的外在表现）
+            if (q.type == "multiple_choice" && ids.size >= 2 && referenced.toSet() == ids.toSet()) {
+                return BatchRejection(
+                    BatchRules.ANSWER_NOT_ALL_OPTIONS,
+                    "多选题的答案覆盖了全部 ${ids.size} 个选项，全选题没有区分度",
                 )
             }
         }

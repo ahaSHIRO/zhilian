@@ -8,7 +8,7 @@
 
 校验分三层：
   1. JSON Schema（复用 App 打包的同一份权威 Schema：docs/schema/batch-v1.schema.json）
-  2. 应用级规则（Schema 表达不了、由 App 逐题执行的 8 项，见 batch-spec-v1.md）
+  2. 应用级规则（Schema 表达不了、由 App 逐题执行的 9 项，见 batch-spec-v1.md）
   3. 标签封闭词表（question-authoring.md §八，出题规范约束，PC 侧专属——App 不校验标签；
      词表由 tools/vocab.py 从规范文档实时解析，文档登记即生效）
 
@@ -52,6 +52,7 @@ RULE_CATEGORY_NOT_BLANK = 5
 RULE_BATCH_ORDER_UNIQUE = 6
 RULE_FORMAT_VERSION = 7
 RULE_SUSPECTED_DUPLICATE = 8
+RULE_ANSWER_NOT_ALL_OPTIONS = 9
 RULE_EXTRA = 0
 
 errors = []
@@ -135,6 +136,15 @@ def validate_app_level(batch):
                         RULE_ANSWER_REFERENCES_OPTION)
             if qtype == "multiple_choice" and isinstance(answer, list) and len(answer) < 2:
                 err(f"[应用级] 题 {qid} 是多选但 answer 少于 2 项", RULE_EXTRA)
+
+            # 清单 9：多选题的 answer 不得覆盖全部选项。全选题没有区分度；实测
+            # batch-0024 第 7 题的答案键缺陷（解析写「A 整体是错误项、不入选」而 answer 含 A）
+            # 正是这个形态——机械判定抓的是这个确定性的外在形状。
+            if qtype == "multiple_choice" and len(option_ids) >= 2 and set(referenced) == set(option_ids):
+                err(f"[应用级] 题 {qid} 是多选但 answer 覆盖了全部 {len(option_ids)} 个选项"
+                    f"（{sorted(set(option_ids))}）——全选题没有区分度；"
+                    f"若解析已判定其中某项不入选，即答案键与解析自相矛盾",
+                    RULE_ANSWER_NOT_ALL_OPTIONS)
 
         if qtype == "fill_in_blank":
             acc = q.get("acceptableAnswers")
@@ -220,7 +230,7 @@ def validate_vocabulary(batch):
     """标签封闭词表核对（question-authoring.md §八，第三层）。
 
     PC 侧专属约束，App 不校验标签——因此只挂主校验路径、不进 --selftest 夹具
-    （夹具钉的是 Schema + 8 项应用级规则的跨端一致性，掺入词表会破坏与
+    （夹具钉的是 Schema + 9 项应用级规则的跨端一致性，掺入词表会破坏与
     Kotlin 端 AppLevelFixturesTest 的规则集合比对）。
 
     词表按 subject 取并集：跨分类复用合法（既有先例 suspending-functions、operators），
