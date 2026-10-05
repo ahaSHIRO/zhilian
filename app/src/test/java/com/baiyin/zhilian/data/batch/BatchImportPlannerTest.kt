@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 批次导入规划单测（batch-spec-v1.md §应用级校验清单 1–9）。
+ * 批次导入规划单测（batch-spec-v1.md §应用级校验清单 1–10）。
  *
  * 这是本仓此前覆盖率为零、爆炸半径最大的一块：导入出错要么整批被拒、要么静默跳题。
  * 规则抽成纯模块后，清单里的每一条都能在这里钉死，不必插一台真机。
@@ -135,6 +135,20 @@ class BatchImportPlannerTest {
         )
         val rejection = BatchImportPlanner.validateQuestion(all)
         assertEquals(BatchRules.ANSWER_NOT_ALL_OPTIONS, rejection?.rule)
+    }
+
+    @Test
+    fun question_rejects_explanation_declaring_other_answer() {
+        // 清单 10：解析显式声明「答案是 B」，而 answer 写的是 A
+        val drift = q().copy(explanation = "答案是 B。")
+        val rejection = BatchImportPlanner.validateQuestion(drift)
+        assertEquals(BatchRules.DECLARED_ANSWER_MISMATCH, rejection?.rule)
+    }
+
+    @Test
+    fun question_accepts_explanation_declaring_same_answer() {
+        // 反向对照：声明与 answer 一致时不该拒
+        assertNull(BatchImportPlanner.validateQuestion(q().copy(explanation = "为什么对：选 A。")))
     }
 
     // ---- 规划：清单 3 后半 / 8 ----

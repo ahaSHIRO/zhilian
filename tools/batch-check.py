@@ -8,7 +8,7 @@
 
 校验分三层：
   1. JSON Schema（复用 App 打包的同一份权威 Schema：docs/schema/batch-v1.schema.json）
-  2. 应用级规则（Schema 表达不了、由 App 逐题执行的 9 项，见 batch-spec-v1.md）
+  2. 应用级规则（Schema 表达不了、由 App 逐题执行的 10 项，见 batch-spec-v1.md）
   3. 标签封闭词表（question-authoring.md §八，出题规范约束，PC 侧专属——App 不校验标签；
      词表由 tools/vocab.py 从规范文档实时解析，文档登记即生效）
 
@@ -24,6 +24,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 import unicodedata
 
@@ -53,6 +54,7 @@ RULE_BATCH_ORDER_UNIQUE = 6
 RULE_FORMAT_VERSION = 7
 RULE_SUSPECTED_DUPLICATE = 8
 RULE_ANSWER_NOT_ALL_OPTIONS = 9
+RULE_DECLARED_ANSWER_MISMATCH = 10
 RULE_EXTRA = 0
 
 errors = []
@@ -83,6 +85,48 @@ def validate_schema(batch, schema):
         loc = "/" + "/".join(str(x) for x in p.absolute_path) if p.absolute_path else "(根)"
         err(f"[Schema] {loc}: {p.message}")
     return len(problems) == 0
+
+
+# 清单 10：解析里「显式声明答案」的习语。声明与 answer 不符 = 答案键与解析脱钩。
+# 习语按题型分档：多选只认「整集声明」类，因为单选里常见的「…原因，选 C。」
+# 是在解释「为什么 C 入选」，放到多选语境会误报（2026-10-05 实测 batch-0024 第 7 题）。
+_DECL_SINGLE = [
+    re.compile(r"为什么对\s*[：:]\s*选\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"答案是\s*[「\"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"答案为\s*[「\"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"正确项是\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"故选\s*([A-E])"),
+    re.compile(r"选\s*([A-E])\s*[。.]"),
+]
+_DECL_MULTI = [
+    re.compile(r"答案是\s*[「\"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"答案为\s*[「\"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+    re.compile(r"正确项是\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"),
+]
+# 否定语境守卫：命中点前一字为 不/别/勿，或命中点后紧跟「不选 / 选错」等，一律不算声明
+_DECL_NEG_TAIL = ("不选", "别选", "勿选", "没选", "选错")
+_LETTER = re.compile(r"[A-E]")
+
+
+def declared_answer_sets(explanation, qtype):
+    """抽出解析里所有「显式声明答案」的字母集合（已排除否定语境）。
+
+    返回形如 {frozenset({'B'})}；空集表示解析没有显式声明答案（多数情况）。
+    """
+    if not explanation:
+        return set()
+    pats = _DECL_SINGLE if qtype == "single_choice" else _DECL_MULTI
+    found = set()
+    for pat in pats:
+        for m in pat.finditer(explanation):
+            pre = explanation[max(0, m.start() - 4):m.start()].rstrip()
+            if pre and pre[-1] in "不别勿":
+                continue
+            tail = explanation[m.end():m.end() + 4]
+            if any(t in tail for t in _DECL_NEG_TAIL):
+                continue
+            found.add(frozenset(_LETTER.findall(m.group(1))))
+    return found
 
 
 def validate_app_level(batch):
@@ -145,6 +189,14 @@ def validate_app_level(batch):
                     f"（{sorted(set(option_ids))}）——全选题没有区分度；"
                     f"若解析已判定其中某项不入选，即答案键与解析自相矛盾",
                     RULE_ANSWER_NOT_ALL_OPTIONS)
+
+            # 清单 10：解析里显式声明的答案必须与 answer 一致（声明与答案键脱钩）
+            declared = declared_answer_sets(q.get("explanation") or "", qtype)
+            if declared and declared != {frozenset(referenced)}:
+                shown = "、".join("".join(sorted(d)) for d in sorted(declared, key=sorted))
+                err(f"[应用级] 题 {qid} 的解析显式声明答案是 {shown}，"
+                    f"与 answer {sorted(referenced)} 不符——答案键与解析脱钩",
+                    RULE_DECLARED_ANSWER_MISMATCH)
 
         if qtype == "fill_in_blank":
             acc = q.get("acceptableAnswers")
@@ -230,7 +282,7 @@ def validate_vocabulary(batch):
     """标签封闭词表核对（question-authoring.md §八，第三层）。
 
     PC 侧专属约束，App 不校验标签——因此只挂主校验路径、不进 --selftest 夹具
-    （夹具钉的是 Schema + 9 项应用级规则的跨端一致性，掺入词表会破坏与
+    （夹具钉的是 Schema + 10 项应用级规则的跨端一致性，掺入词表会破坏与
     Kotlin 端 AppLevelFixturesTest 的规则集合比对）。
 
     词表按 subject 取并集：跨分类复用合法（既有先例 suspending-functions、operators），

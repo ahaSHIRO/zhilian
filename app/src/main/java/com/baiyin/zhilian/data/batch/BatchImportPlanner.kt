@@ -55,6 +55,9 @@ object BatchRules {
     /** 9：多选题的 `answer` 不得覆盖全部选项（全选题没有区分度） */
     const val ANSWER_NOT_ALL_OPTIONS = 9
 
+    /** 10：解析里显式声明的答案必须与 `answer` 一致（声明与答案键脱钩） */
+    const val DECLARED_ANSWER_MISMATCH = 10
+
     /** 0：清单之外、只有一端实现的补充检查（不该出现在共同夹具里） */
     const val EXTRA = 0
 }
@@ -115,7 +118,7 @@ internal data class ResolutionOutcome(
 )
 
 /**
- * 批次导入的应用级校验与规划（batch-spec-v1.md §应用级校验清单 1–9）。
+ * 批次导入的应用级校验与规划（batch-spec-v1.md §应用级校验清单 1–10）。
  *
  * 纯模块：输入是批次 DTO + 库内现状快照 + 时间戳，输出是导入计划。
  * 文件读取、Schema 校验与事务写入都留在适配器（[BatchImportService]）里，
@@ -224,6 +227,49 @@ object BatchImportPlanner {
         return null
     }
 
+    /**
+     * 清单 10 的解析侧判定：抽出解析里所有「显式声明答案」的字母集合（已排除否定语境）。
+     *
+     * 习语按题型分档——多选只认「整集声明」（答案是 / 答案为 / 正确项是）。单选里常见的
+     * 「…原因，选 C。」是在解释**为什么 C 入选**，放到多选语境会误报
+     * （2026-10-05 实测 batch-0024 第 7 题）。
+     */
+    private val declPatternsSingle = listOf(
+        Regex("""为什么对\s*[：:]\s*选\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""答案是\s*[「"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""答案为\s*[「"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""正确项是\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""故选\s*([A-E])"""),
+        Regex("""选\s*([A-E])\s*[。.]"""),
+    )
+
+    private val declPatternsMulti = listOf(
+        Regex("""答案是\s*[「"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""答案为\s*[「"'（(]?\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+        Regex("""正确项是\s*([A-E](?:\s*[、,，/和及]\s*[A-E])*)"""),
+    )
+
+    /** 否定语境守卫：命中点前一字为 不/别/勿，或命中点后紧跟「不选 / 选错」等，一律不算声明 */
+    private val declNegTail = listOf("不选", "别选", "勿选", "没选", "选错")
+
+    private val letterPattern = Regex("[A-E]")
+
+    internal fun declaredAnswerSets(explanation: String, qtype: String): Set<Set<String>> {
+        val pats = if (qtype == "single_choice") declPatternsSingle else declPatternsMulti
+        val found = mutableSetOf<Set<String>>()
+        pats.forEach { pat ->
+            pat.findAll(explanation).forEach { m ->
+                val pre = explanation.substring(maxOf(0, m.range.first - 4), m.range.first).trimEnd()
+                val tail = explanation.substring(m.range.last + 1, minOf(explanation.length, m.range.last + 5))
+                val negated = (pre.isNotEmpty() && pre.last() in "不别勿") || declNegTail.any { it in tail }
+                if (!negated) {
+                    found += letterPattern.findAll(m.groupValues[1]).map { it.value }.toSet()
+                }
+            }
+        }
+        return found
+    }
+
     /** 题目级校验（清单 1/2/5）：null 通过，否则该题的原因 */
     fun validateQuestion(q: QuestionDto): BatchRejection? {
         if (q.type == "single_choice" || q.type == "multiple_choice") {
@@ -255,6 +301,15 @@ object BatchImportPlanner {
                 return BatchRejection(
                     BatchRules.ANSWER_NOT_ALL_OPTIONS,
                     "多选题的答案覆盖了全部 ${ids.size} 个选项，全选题没有区分度",
+                )
+            }
+            // 清单 10：解析里显式声明的答案必须与 answer 一致（声明与答案键脱钩）
+            val declared = declaredAnswerSets(q.explanation, q.type)
+            if (declared.isNotEmpty() && declared != setOf(referenced.toSet())) {
+                val shown = declared.map { it.sorted().joinToString("") }.sorted().joinToString("、")
+                return BatchRejection(
+                    BatchRules.DECLARED_ANSWER_MISMATCH,
+                    "解析显式声明的答案是 $shown，与 answer ${referenced.sorted().joinToString("")} 不符",
                 )
             }
         }

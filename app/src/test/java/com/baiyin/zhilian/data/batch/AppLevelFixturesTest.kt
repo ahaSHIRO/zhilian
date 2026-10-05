@@ -9,7 +9,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * 应用级校验清单 1–9 的跨语言共同夹具（docs/schema/app-level-fixtures.json）。
+ * 应用级校验清单 1–10 的跨语言共同夹具（docs/schema/app-level-fixtures.json）。
  *
  * 为什么需要它：同一套规则有两份实现——应用内权威 [BatchImportPlanner]，与电脑端
  * 投放前的 tools/batch-check.py。两侧各改各的、谁也不会立刻发现，直到某个批次
@@ -65,6 +65,7 @@ class AppLevelFixturesTest {
             BatchRules.BATCH_ORDER_UNIQUE,
             BatchRules.SUSPECTED_DUPLICATE,
             BatchRules.ANSWER_NOT_ALL_OPTIONS,
+            BatchRules.DECLARED_ANSWER_MISMATCH,
         )
         assertEquals("夹具未覆盖：${emittable - covered}", emittable, covered)
     }
