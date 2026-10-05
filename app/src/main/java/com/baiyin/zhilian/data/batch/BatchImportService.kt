@@ -152,6 +152,7 @@ class BatchImportService internal constructor(
                                 batchOrder = bDao.getById(batchId)?.batchOrder ?: 0,
                                 orderInBatch = item.orderInBatch,
                                 importedAt = clock(),
+                                batchId = item.batchId,
                             )
                         )
                     )

@@ -44,9 +44,51 @@ interface QuestionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(questions: List<QuestionEntity>)
 
+    /** 全库题目（含停用）；题库对账需要完整现状快照做内容比对与归属判定 */
+    @Query("SELECT * FROM questions")
+    suspend fun all(): List<QuestionEntity>
+
     /** 已存在的题目 ID（导入前判重） */
     @Query("SELECT question_id FROM questions WHERE question_id IN (:ids)")
     suspend fun existingIds(ids: List<String>): List<String>
+
+    /**
+     * 原位覆盖题目**内容列**（题库对账，ADR-0017）。
+     *
+     * 刻意逐列点名而非 `@Update`（后者会连 `inactive` / `consecutive_perfect` /
+     * `has_ever_wrong` / `favorite` / `imported_at` 一起写回）——本地练习状态必须随
+     * `questionId` 保留，不被文件覆盖。
+     */
+    @Query(
+        "UPDATE questions SET type = :type, subject = :subject, category = :category, " +
+            "tags_json = :tagsJson, stem = :stem, options_json = :optionsJson, " +
+            "answer_json = :answerJson, explanation = :explanation, source_json = :sourceJson, " +
+            "batch_order = :batchOrder, order_in_batch = :orderInBatch, batch_id = :batchId " +
+            "WHERE question_id = :questionId"
+    )
+    suspend fun updateContent(
+        questionId: String,
+        type: String,
+        subject: String,
+        category: String,
+        tagsJson: String,
+        stem: String,
+        optionsJson: String?,
+        answerJson: String,
+        explanation: String,
+        sourceJson: String,
+        batchOrder: Int,
+        orderInBatch: Int,
+        batchId: String,
+    )
+
+    /** 归属某批次的题目 ID（撤销批次导入用） */
+    @Query("SELECT question_id FROM questions WHERE batch_id = :batchId")
+    suspend fun idsByBatch(batchId: String): List<String>
+
+    /** 删除归属某批次的题目（撤销批次导入用） */
+    @Query("DELETE FROM questions WHERE batch_id = :batchId")
+    suspend fun deleteByBatch(batchId: String)
 
     /** 与候选题干（NFC+trim 归一化）完全相同的既有题（疑似重复判定材料，清单 8） */
     @Query("SELECT question_id, stem FROM questions WHERE stem IN (:stems) AND inactive = 0")

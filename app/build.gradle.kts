@@ -66,8 +66,9 @@ tasks.matching { it.name == "preBuild" }
     .configureEach { dependsOn(copyBatchSchema) }
 
 ksp {
-    // Room 导出 Schema 便于迁移审查与测试（当前 v2，4 张表：questions /
-    // answer_records / processed_batches / pending_duplicates）
+    // Room 导出 Schema 便于迁移审查与测试（当前 v3，4 张表：questions /
+    // answer_records / processed_batches / pending_duplicates；v3 为题库对账加了
+    // questions.batch_id 与 processed_batches.content_hash，见 ADR-0017）
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 

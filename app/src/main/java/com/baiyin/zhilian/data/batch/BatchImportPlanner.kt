@@ -343,7 +343,7 @@ object BatchImportPlanner {
                         if (owner != null) {
                             duplicates += DuplicateCandidate(batch.batchId, q, index, owner)
                         } else {
-                            toInsert += toEntity(q, batch.subject, batch.batchOrder, index, importedAt)
+                            toInsert += toEntity(q, batch.subject, batch.batchOrder, index, importedAt, batch.batchId)
                         }
                     }
                 }
@@ -364,6 +364,7 @@ object BatchImportPlanner {
         batchOrder: Int,
         orderInBatch: Int,
         importedAt: Long,
+        batchId: String,
     ): QuestionEntity =
         QuestionEntity(
             questionId = q.questionId,
@@ -385,5 +386,6 @@ object BatchImportPlanner {
             batchOrder = batchOrder,
             orderInBatch = orderInBatch,
             importedAt = importedAt,
+            batchId = batchId,
         )
 }

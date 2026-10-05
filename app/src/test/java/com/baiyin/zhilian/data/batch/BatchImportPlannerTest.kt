@@ -238,7 +238,7 @@ class BatchImportPlannerTest {
     @Test
     fun entity_mapping_normalizes_identity_fields() {
         val item = q(category = "  协程  ", stem = "cafe\u0301", type = "fill_in_blank", options = null, answer = null, acceptableAnswers = listOf("fun"))
-        val entity = BatchImportPlanner.toEntity(item, subject = "kotlin", batchOrder = 1, orderInBatch = 3, importedAt = 0L)
+        val entity = BatchImportPlanner.toEntity(item, subject = "kotlin", batchOrder = 1, orderInBatch = 3, importedAt = 0L, batchId = "b1")
 
         assertEquals("协程", entity.category)
         assertEquals("caf\u00E9", entity.stem) // NFC
@@ -250,7 +250,7 @@ class BatchImportPlannerTest {
 
     @Test
     fun entity_mapping_encodes_options_and_source_as_json() {
-        val entity = BatchImportPlanner.toEntity(q(), subject = "kotlin", batchOrder = 1, orderInBatch = 0, importedAt = 0L)
+        val entity = BatchImportPlanner.toEntity(q(), subject = "kotlin", batchOrder = 1, orderInBatch = 0, importedAt = 0L, batchId = "b1")
         assertNotNull(entity.optionsJson)
         assertTrue(entity.optionsJson!!.contains("\"optionId\":\"A\""))
         assertTrue(entity.sourceJson.contains("文档"))

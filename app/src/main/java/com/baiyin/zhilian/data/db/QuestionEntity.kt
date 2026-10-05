@@ -6,7 +6,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * 题目（本机题库）。只追加：导入后不原位修改内容字段；停用置 inactive。
+ * 题目（本机题库）。内容字段可被题库对账原位覆盖（同 questionId，见 ADR-0017）；
+ * 本地状态（inactive / 掌握度 / 收藏）不由对账写；停用置 inactive 且不可逆。
  * 身份与匹配规范见 docs/schema/batch-spec-v1.md：分类/标签 NFC + trim 精确匹配。
  */
 @Entity(
@@ -50,6 +51,12 @@ data class QuestionEntity(
     @ColumnInfo(name = "favorite") val favorite: Boolean = false,
     /** 导入时间（epoch millis） */
     @ColumnInfo(name = "imported_at") val importedAt: Long,
+    /**
+     * 归属批次 ID（题库对账的题目所有权键，撤销批次导入据此定位本批题目）。
+     * 不用 `batchOrder` 当归属键：对账更新会按文件覆盖 `batchOrder`，无法稳定标识来源。
+     * 首版迁移（v2→v3）按 batchOrder 关联 processed_batches 回填。
+     */
+    @ColumnInfo(name = "batch_id") val batchId: String = "",
 ) {
     /** 错题定义（CONTEXT.md）：存在错误作答且未被连续两次全对消解 */
     val isWrong: Boolean get() = hasEverWrong && consecutivePerfect < WRONG_THRESHOLD

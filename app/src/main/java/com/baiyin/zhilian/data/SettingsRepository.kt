@@ -7,12 +7,17 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.baiyin.zhilian.data.batch.BatchJson
+import com.baiyin.zhilian.data.batch.ReconcileDigest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_BATCH_TREE_URI = "batch_tree_uri"
 private const val KEY_BOTTOM_BAR_STYLE = "bottom_bar_style"
+private const val KEY_LAST_RECONCILE = "last_reconcile"
 
 // DataStore 单例委托必须是顶层属性，避免多实例异常
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -66,5 +71,26 @@ class SettingsRepository(context: Context) {
             if (uri == null) prefs.remove(stringPreferencesKey(KEY_BATCH_TREE_URI))
             else prefs[stringPreferencesKey(KEY_BATCH_TREE_URI)] = uri.toString()
         }
+    }
+
+    /**
+     * 最近一次题库对账的摘要（ADR-0017 / Q8）。有变更时在批次管理页留一条；无则为 null。
+     * 用 JSON 存在本机设置里，跨进程保留——用户下次进批次页仍能看到「上次自动更新了什么」。
+     */
+    val lastReconcile: Flow<Read<ReconcileDigest?>> = dataStore.data.map { prefs ->
+        prefs[stringPreferencesKey(KEY_LAST_RECONCILE)]?.let { raw ->
+            runCatching { BatchJson.json.decodeFromString<ReconcileDigest>(raw) }.getOrNull()
+        }
+    }.asRead()
+
+    suspend fun setLastReconcile(digest: ReconcileDigest) {
+        dataStore.edit {
+            it[stringPreferencesKey(KEY_LAST_RECONCILE)] = BatchJson.json.encodeToString(digest)
+        }
+    }
+
+    /** 用户看过摘要后清除 */
+    suspend fun clearLastReconcile() {
+        dataStore.edit { it.remove(stringPreferencesKey(KEY_LAST_RECONCILE)) }
     }
 }

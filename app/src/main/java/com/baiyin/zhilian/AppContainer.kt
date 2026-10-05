@@ -3,8 +3,11 @@ package com.baiyin.zhilian
 import android.content.Context
 import com.baiyin.zhilian.data.SettingsRepository
 import com.baiyin.zhilian.data.batch.BatchImportService
+import com.baiyin.zhilian.data.batch.BatchReconcileService
+import com.baiyin.zhilian.data.batch.BatchReconciler
 import com.baiyin.zhilian.data.batch.BatchSchemaValidator
 import com.baiyin.zhilian.data.batch.RoomImportStore
+import com.baiyin.zhilian.data.batch.RoomReconcileStore
 import com.baiyin.zhilian.data.db.ZhilianDatabase
 import com.baiyin.zhilian.data.practice.PracticeRepository
 import com.baiyin.zhilian.data.practice.PracticeSessionLoader
@@ -25,13 +28,32 @@ import com.baiyin.zhilian.data.question.QuestionBank
  */
 class AppContainer(context: Context) {
     private val database: ZhilianDatabase = ZhilianDatabase.get(context)
+
+    /** 批次 Schema（assets 里由构建期从 docs/schema 复制）；导入与对账共用一份 */
+    private val schemaValidator = BatchSchemaValidator(
+        context.assets.open("batch-v1.schema.json").bufferedReader().use { it.readText() }
+    )
+
     val settingsRepository: SettingsRepository = SettingsRepository(context)
+
+    /** 手动兜底导入（保留旧「逐题加入」语义，只对新批次生效） */
     val importService: BatchImportService = BatchImportService(
         importStore = RoomImportStore(database),
-        schemaValidator = BatchSchemaValidator(
-            context.assets.open("batch-v1.schema.json").bufferedReader().use { it.readText() }
-        ),
+        schemaValidator = schemaValidator,
         db = database,
+    )
+
+    /** 题库对账（ADR-0017）：目录为权威源，自动对账与撤销批次导入 */
+    val reconcileService: BatchReconcileService = BatchReconcileService(
+        store = RoomReconcileStore(database),
+        schemaValidator = schemaValidator,
+    )
+
+    /** 前台自动对账的薄壳；自动与手动两条触发路径由此统一入口 */
+    val reconciler: BatchReconciler = BatchReconciler(
+        context = context.applicationContext,
+        settings = settingsRepository,
+        service = reconcileService,
     )
     val practiceRepository: PracticeRepository = PracticeRepository(RoomPracticeStore(database))
     val practiceStats: PracticeStats = PracticeStats(database)

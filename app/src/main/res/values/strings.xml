@@ -145,4 +145,20 @@
     <string name="batch_result_duplicates">另有 %1$d 道疑似重复待人工判定。</string>
     <string name="batch_result_warnings">另有 %1$d 条提示（不影响导入）：</string>
     <string name="batch_result_more_issues">…以及 %1$d 条未展示。</string>
+    <string name="batch_reconcile_action">立即对账</string>
+    <string name="batch_reconcile_busy">对账中…</string>
+    <string name="batch_reconcile_summary_title">上次对账</string>
+    <string name="batch_reconcile_summary_line">变更 %1$d 批 · 新增 %2$d · 更新 %3$d · 停用 %4$d · 待决 %5$d</string>
+    <string name="batch_reconcile_blocked_title">待处理 %1$d 批</string>
+    <string name="batch_reconcile_blocked_line">%1$s：%2$s</string>
+    <string name="batch_reconcile_dismiss">知道了</string>
+    <string name="batch_status_new">未对账</string>
+    <string name="batch_status_reconciled">已对账</string>
+    <string name="batch_status_stale">待对账</string>
+    <string name="batch_status_blocked">待处理</string>
+    <string name="batch_undo_action">撤销导入</string>
+    <string name="batch_undo_confirm_title">撤销该批次导入？</string>
+    <string name="batch_undo_confirm_message">将删除顺序号 %1$d 批次的全部题目及其作答记录与收藏，不可恢复。</string>
+    <string name="batch_undo_confirm">撤销</string>
+    <string name="batch_undo_cancel">取消</string>
 </resources>

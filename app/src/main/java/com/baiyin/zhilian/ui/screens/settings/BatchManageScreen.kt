@@ -1,6 +1,5 @@
 package com.baiyin.zhilian.ui.screens.settings
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -45,52 +43,32 @@ import com.baiyin.zhilian.AppContainer
 import com.baiyin.zhilian.R
 import com.baiyin.zhilian.data.Read
 import com.baiyin.zhilian.data.batch.BatchDirectoryScan
-import com.baiyin.zhilian.data.batch.BatchFileDto
-import com.baiyin.zhilian.data.batch.BatchFileRef
+import com.baiyin.zhilian.data.batch.BatchFingerprint
 import com.baiyin.zhilian.data.batch.BatchJson
 import com.baiyin.zhilian.data.batch.ImportOutcome
 import com.baiyin.zhilian.data.batch.ScannedBatch
 import com.baiyin.zhilian.data.batch.ScanState
+import com.baiyin.zhilian.data.batch.listBatchFiles
+import com.baiyin.zhilian.data.batch.parseBatch
+import com.baiyin.zhilian.data.batch.readBatchText
+import com.baiyin.zhilian.data.db.PendingDuplicateEntity
+import com.baiyin.zhilian.data.db.ProcessedBatchEntity
 import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-/** 阶段 1：只列目录（SAF listFiles），拿到文件名就返回——不读文件内容 */
-private suspend fun listBatchFiles(context: Context, uri: Uri): List<BatchFileRef> =
-    withContext(Dispatchers.IO) {
-        DocumentFile.fromTreeUri(context, uri)
-            ?.listFiles()
-            ?.filter { it.isFile && it.name?.endsWith(".json") == true }
-            ?.sortedByDescending { it.name ?: "" }
-            ?.map { BatchFileRef(it.uri.toString(), it.name ?: "?") }
-            ?: emptyList()
-    }
-
-/** 阶段 2：读 + 解析单个文件（SAF openInputStream 各自独立，故可并行） */
-private suspend fun parseBatch(context: Context, ref: BatchFileRef): BatchFileDto? =
-    withContext(Dispatchers.IO) {
-        context.contentResolver.openInputStream(Uri.parse(ref.key))
-            ?.bufferedReader()?.use { it.readText() }
-            ?.let { text -> BatchJson.json.decodeFromString<BatchFileDto>(text) }
-    }
-
-/** 读批次文件文本（SAF）：导入用（ADR-0013：SAF 读取留调用方，Service 只收文本） */
-private suspend fun readBatchText(context: Context, uri: Uri): String? =
-    withContext(Dispatchers.IO) {
-        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-    }
 
 /**
- * 批次管理：SAF 授权 Syncthing 批次目录 → 自动/手动扫描待处理批次 → 单个或全部导入 →
- * 结果报告；疑似重复逐条人工决策（README 导入韧性）。
- * 目录文件与已处理批次均按 batchOrder 倒序（最新批次在最上）。
+ * 批次管理：SAF 授权 Syncthing 批次目录 → 目录级**题库对账**（ADR-0017）→ 结果摘要；
+ * 疑似重复逐条人工决策；已处理批次可**撤销导入**。保留单个「导入」作为新批次的兜底。
  *
- * 扫描的规则与竞态全在 [BatchDirectoryScan]：本页只把 SAF 读盘与导入动作接上去，
- * 并按 [ScanState] 渲染——首帧不渲染任何列表 section（含 Room 的已处理批次），
- * 避免「快数据先占位、慢数据后插入」的跳动（pitfalls 2.13）。
+ * 对账在 App 每次回前台时自动跑（[com.baiyin.zhilian.data.batch.BatchReconciler]）；
+ * 本页的「立即对账」与它共用同一入口，摘要只一份。逐文件状态由「当前文件指纹 vs
+ * 已处理记录指纹」判定：一致=已对账、不一致=待对账、被拒=待处理。
+ *
+ * 扫描的规则与竞态全在 [BatchDirectoryScan]；SAF 读盘在 [listBatchFiles] / [parseBatch] /
+ * [readBatchText]。首帧不渲染 Room 数据 section，避免「快数据先占位、慢数据后插入」的跳动
+ * （pitfalls 2.13）。
  */
 @Composable
 fun BatchManageScreen(
@@ -108,12 +86,15 @@ fun BatchManageScreen(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val pendingDuplicates by container.importService.observePendingDuplicates()
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val lastReconcileRead by container.settingsRepository.lastReconcile
+        .collectAsStateWithLifecycle(initialValue = Read.Pending)
+    val lastReconcile = lastReconcileRead.valueOrNull
 
     var importOutcome by remember { mutableStateOf<ImportOutcome?>(null) }
-    var resolving by remember { mutableStateOf<com.baiyin.zhilian.data.db.PendingDuplicateEntity?>(null) }
+    var resolving by remember { mutableStateOf<PendingDuplicateEntity?>(null) }
+    var undoTarget by remember { mutableStateOf<ProcessedBatchEntity?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var importingAll by remember { mutableStateOf(false) }
-    var allOutcomes by remember { mutableStateOf<List<Pair<String, ImportOutcome>>?>(null) }
+    var reconciling by remember { mutableStateOf(false) }
 
     val dirPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -162,9 +143,16 @@ fun BatchManageScreen(
     val skeleton = (scanState as? ScanState.FirstScan)?.files.orEmpty()
     val batches = (scanState as? ScanState.Ready)?.batches.orEmpty()
 
-    fun isImported(sb: ScannedBatch): Boolean {
-        val p = sb.dto ?: return false
-        return processedBatches.any { it.batchId == p.batchId && it.status == "IMPORTED" }
+    /** 该文件当前对账状态：已对账 / 待对账 / 待处理 / 解析失败 / 未对账 */
+    fun fileState(sb: ScannedBatch): FileState {
+        val dto = sb.dto ?: return FileState.ParseFailed
+        lastReconcile?.blocked?.firstOrNull { it.fileName == sb.file.name }?.let {
+            return FileState.Blocked(it.reason)
+        }
+        val record = processedBatches.firstOrNull { it.batchId == dto.batchId }
+            ?: return FileState.New
+        return if (record.contentHash == BatchFingerprint.of(dto)) FileState.Reconciled
+        else FileState.Stale
     }
 
     // 实底背景：二级页侧滑时页面作为一整张「纸」移动，稀疏卡片之间不再透出下层页面
@@ -191,6 +179,49 @@ fun BatchManageScreen(
                 TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
                 TextButton(onClick = { dirPicker.launch(null) }) {
                     Text(stringResource(if (treeUri == null) R.string.batch_pick_dir else R.string.batch_change_dir))
+                }
+            }
+        }
+
+        // 对账摘要（Q8）：有变更或待处理才出现，平时不弹
+        lastReconcile?.let { digest ->
+            if (digest.hasChanges) {
+                item {
+                    ZhilianCard {
+                        Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+                            Text(
+                                stringResource(R.string.batch_reconcile_summary_title),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.batch_reconcile_summary_line,
+                                    digest.changedBatches, digest.inserted, digest.updated,
+                                    digest.retired, digest.pendingDuplicates,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (digest.blocked.isNotEmpty()) {
+                                Text(
+                                    stringResource(R.string.batch_reconcile_blocked_title, digest.blocked.size),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                digest.blocked.forEach { b ->
+                                    Text(
+                                        stringResource(R.string.batch_reconcile_blocked_line, b.fileName, b.reason),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                                TextButton(onClick = {
+                                    scope.launch { container.settingsRepository.clearLastReconcile() }
+                                }) { Text(stringResource(R.string.batch_reconcile_dismiss)) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -259,29 +290,17 @@ fun BatchManageScreen(
                 ) {
                     Text(stringResource(R.string.batch_dir_files), style = MaterialTheme.typography.titleMedium)
                     FilledTonalButton(
-                        enabled = !busy && !importingAll && batches.any { it.dto != null && !isImported(it) },
+                        enabled = !busy && !reconciling && batches.any { it.dto != null },
                         onClick = {
                             scope.launch {
-                                importingAll = true
-                                val results = mutableListOf<Pair<String, ImportOutcome>>()
-                                batches.forEach { sb ->
-                                    if (sb.dto != null && !isImported(sb)) {
-                                        val text = readBatchText(context, Uri.parse(sb.file.key))
-                                        val outcome = if (text != null) {
-                                            container.importService.importFromText(text, sb.file.name)
-                                        } else {
-                                            ImportOutcome.Failed(null, sb.file.name, "无法读取文件")
-                                        }
-                                        results += sb.file.name to outcome
-                                    }
-                                }
-                                importingAll = false
-                                allOutcomes = results
+                                reconciling = true
+                                container.reconciler.reconcileNow()
+                                reconciling = false
                             }
                         },
                     ) {
                         Text(stringResource(
-                            if (importingAll) R.string.batch_import_all_busy else R.string.batch_import_all,
+                            if (reconciling) R.string.batch_reconcile_busy else R.string.batch_reconcile_action,
                         ))
                     }
                 }
@@ -312,9 +331,9 @@ fun BatchManageScreen(
 
             items(batches, key = { it.file.key }) { sb ->
                 val preview = sb.dto
-                val processed = isImported(sb)
+                val state = fileState(sb)
                 ZhilianCard(
-                    containerColor = if (processed) MaterialTheme.colorScheme.surface
+                    containerColor = if (state is FileState.Reconciled) MaterialTheme.colorScheme.surface
                     else MaterialTheme.colorScheme.secondaryContainer,
                 ) {
                     Row(
@@ -329,32 +348,36 @@ fun BatchManageScreen(
                                 stringResource(
                                     R.string.batch_preview_line,
                                     preview.batchOrder, preview.questions.size, preview.retiredQuestionIds.size,
-                                )
+                                ) + " · " + stateLabel(state)
                             } else {
                                 stringResource(R.string.batch_preview_fail)
                             }
                             Text(
                                 subText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (state is FileState.Blocked) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Button(
-                            enabled = !busy && !importingAll && preview != null && !processed,
-                            onClick = {
-                                scope.launch {
-                                    busy = true
-                                    val text = readBatchText(context, Uri.parse(sb.file.key))
-                                    importOutcome = if (text != null) {
-                                        container.importService.importFromText(text, sb.file.name)
-                                    } else {
-                                        ImportOutcome.Failed(null, sb.file.name, "无法读取文件")
+                        // 兜底导入只对新批次开放：已对账/待对账由自动对账处理，避免「导入却不更新」的误导
+                        if (state is FileState.New) {
+                            Button(
+                                enabled = !busy && !reconciling,
+                                onClick = {
+                                    scope.launch {
+                                        busy = true
+                                        val text = readBatchText(context, Uri.parse(sb.file.key))
+                                        importOutcome = if (text != null) {
+                                            container.importService.importFromText(text, sb.file.name)
+                                        } else {
+                                            ImportOutcome.Failed(null, sb.file.name, "无法读取文件")
+                                        }
+                                        busy = false
                                     }
-                                    busy = false
-                                }
-                            },
-                        ) {
-                            Text(stringResource(R.string.batch_import_action))
+                                },
+                            ) {
+                                Text(stringResource(R.string.batch_import_action))
+                            }
                         }
                     }
                 }
@@ -390,6 +413,14 @@ fun BatchManageScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                            TextButton(onClick = { undoTarget = b }) {
+                                Text(
+                                    stringResource(R.string.batch_undo_action),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -464,40 +495,26 @@ fun BatchManageScreen(
         )
     }
 
-    // 全部导入汇总报告
-    allOutcomes?.let { outcomes ->
+    // 撤销批次导入（Q6）：删该批题目 + 作答记录 + 待决项 + 已处理记录，不可恢复
+    undoTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { allOutcomes = null },
-            confirmButton = {
-                TextButton(onClick = { allOutcomes = null }) { Text(stringResource(R.string.ok)) }
-            },
-            title = { Text(stringResource(R.string.batch_all_result_title)) },
+            onDismissRequest = { undoTarget = null },
+            title = { Text(stringResource(R.string.batch_undo_confirm_title)) },
             text = {
-                if (outcomes.isEmpty()) {
-                    Text(stringResource(R.string.batch_import_all_none))
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
-                        outcomes.forEach { (name, outcome) ->
-                            val summary = when (outcome) {
-                                is ImportOutcome.Completed ->
-                                    stringResource(
-                                        R.string.batch_result_counts,
-                                        outcome.importedCount, outcome.skippedCount,
-                                        outcome.failedCount, outcome.retiredCount,
-                                    ) + if (outcome.duplicates.isNotEmpty()) {
-                                        " " + stringResource(R.string.batch_result_duplicates, outcome.duplicates.size)
-                                    } else {
-                                        ""
-                                    }
-                                is ImportOutcome.Failed -> outcome.reason.lineSequence().firstOrNull() ?: "失败"
-                            }
-                            Text(
-                                stringResource(R.string.batch_all_result_line, name, summary),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+                Text(stringResource(R.string.batch_undo_confirm_message, target.batchOrder))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        container.reconcileService.undoBatch(target.batchId)
+                        undoTarget = null
                     }
+                }) {
+                    Text(stringResource(R.string.batch_undo_confirm), color = MaterialTheme.colorScheme.error)
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { undoTarget = null }) { Text(stringResource(R.string.batch_undo_cancel)) }
             },
         )
     }
@@ -512,9 +529,36 @@ fun BatchManageScreen(
     }
 }
 
+/** 目录中单个批次的对账状态 */
+private sealed interface FileState {
+    /** 解析失败（不是合法批次） */
+    data object ParseFailed : FileState
+
+    /** 被拒：Schema/解析失败、批内 ID 重复、顺序号冲突（不应用） */
+    data class Blocked(val reason: String) : FileState
+
+    /** 尚无已处理记录：从未对过账 */
+    data object New : FileState
+
+    /** 指纹与记录一致：已对账 */
+    data object Reconciled : FileState
+
+    /** 指纹与记录不一致：内容变了，待对账 */
+    data object Stale : FileState
+}
+
+@Composable
+private fun stateLabel(state: FileState): String = when (state) {
+    FileState.ParseFailed -> stringResource(R.string.batch_preview_fail)
+    is FileState.Blocked -> stringResource(R.string.batch_status_blocked)
+    FileState.New -> stringResource(R.string.batch_status_new)
+    FileState.Reconciled -> stringResource(R.string.batch_status_reconciled)
+    FileState.Stale -> stringResource(R.string.batch_status_stale)
+}
+
 @Composable
 private fun DuplicateResolveDialog(
-    item: com.baiyin.zhilian.data.db.PendingDuplicateEntity,
+    item: PendingDuplicateEntity,
     container: AppContainer,
     onResolved: () -> Unit,
 ) {

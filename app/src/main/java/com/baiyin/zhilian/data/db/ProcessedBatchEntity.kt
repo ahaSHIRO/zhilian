@@ -27,4 +27,10 @@ data class ProcessedBatchEntity(
     @ColumnInfo(name = "processed_at") val processedAt: Long,
     /** 来源文件名（仅报告展示用） */
     @ColumnInfo(name = "file_name") val fileName: String,
+    /**
+     * 上次对账时该批次的内容指纹（见 [com.baiyin.zhilian.data.batch.BatchFingerprint]）。
+     * 与当前文件指纹一致即「已对账」，题库对账据此跳过；不一致才算「待对账」。
+     * 空串表示尚未记录（v2 迁移遗留），首次对账会为其重算一次。
+     */
+    @ColumnInfo(name = "content_hash") val contentHash: String = "",
 )
