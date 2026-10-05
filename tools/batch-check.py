@@ -6,11 +6,12 @@
 整批被拒"从而走一整套回炉流程。App 对 Schema 不合格的批次是整批拒绝且只回报
 前 5 条错误。
 
-校验分三层：
+校验分四层：
   1. JSON Schema（复用 App 打包的同一份权威 Schema：docs/schema/batch-v1.schema.json）
   2. 应用级规则（Schema 表达不了、由 App 逐题执行的 10 项，见 batch-spec-v1.md）
   3. 标签封闭词表（question-authoring.md §八，出题规范约束，PC 侧专属——App 不校验标签；
      词表由 tools/vocab.py 从规范文档实时解析，文档登记即生效）
+  4. 篇幅与配比硬线（question-authoring.md §三，PC 侧专属——App 不校验；2026-10-05 新增）
 
 用法：
     python tools/batch-check.py <批次文件路径> [--batches-dir <已导入批次目录>]
@@ -29,6 +30,9 @@ import sys
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from brevity import (LIMIT_CODE_BLOCKS, LIMIT_CODE_LINES, LIMIT_EXPLANATION,  # noqa: E402
+                     LIMIT_OPTION_TEXT, LIMIT_PROGRAM_PCT, LIMIT_STEM_TEXT,
+                     LIMIT_STEM_TOTAL, split_code_blocks)
 from vocab import FROZEN_TAGS, load_vocabulary  # noqa: E402
 
 try:
@@ -311,6 +315,52 @@ def validate_vocabulary(batch):
                     f"先核对词形（禁单复数/去连字符等变体），确属缺词走提议→扩表", RULE_EXTRA)
 
 
+# ── 篇幅与配比（question-authoring.md §三 篇幅硬线，2026-10-05 全库改定）───────────
+# PC 侧专属、App 不校验；故只挂主校验路径，不进 --selftest 夹具（夹具钉的是 Schema +
+# 10 项应用级规则的跨端一致性，掺入篇幅规则会破坏与 Kotlin 端 AppLevelFixturesTest 的比对）。
+# 硬线数值与 split_code_blocks 的唯一定义在 tools/brevity.py（与 bank-stats.py 共用）。
+def validate_brevity(batch):
+    """篇幅与配比硬线核对（见 question-authoring.md §三；§四 第 9 条）。
+
+    口径（权威）：程序题 = 题干含围栏代码块；「去代码纯文字」= 剥除代码块后 strip 的字符数。
+    """
+    questions = batch.get("questions") or []
+    program = 0
+    for idx, q in enumerate(questions):
+        qid = q.get("questionId", f"#{idx}")
+        stem = q.get("stem") or ""
+        text, blocks = split_code_blocks(stem)
+        if blocks:
+            program += 1
+        if len(text) > LIMIT_STEM_TEXT:
+            err(f"[篇幅] 题 {qid} 题干去代码后 {len(text)} 字 > {LIMIT_STEM_TEXT}"
+                f"——按 §三 篇幅硬线压短", RULE_EXTRA)
+        if len(stem.strip()) > LIMIT_STEM_TOTAL:
+            err(f"[篇幅] 题 {qid} 题干含代码共 {len(stem.strip())} 字 > {LIMIT_STEM_TOTAL}"
+                f"——按 §三 篇幅硬线压短", RULE_EXTRA)
+        if len(blocks) > LIMIT_CODE_BLOCKS:
+            err(f"[篇幅] 题 {qid} 含 {len(blocks)} 个代码块 > {LIMIT_CODE_BLOCKS}"
+                f"——按 §三 篇幅硬线改为单块或改写为概念题", RULE_EXTRA)
+        for n in blocks:
+            if n > LIMIT_CODE_LINES:
+                err(f"[篇幅] 题 {qid} 有代码块 {n} 行 > {LIMIT_CODE_LINES} 行"
+                    f"——按 §三 篇幅硬线压短或降级为短概念题", RULE_EXTRA)
+        expl = q.get("explanation") or ""
+        if len(expl) > LIMIT_EXPLANATION:
+            err(f"[篇幅] 题 {qid} 解析 {len(expl)} 字 > {LIMIT_EXPLANATION}"
+                f"——按 §三 篇幅硬线精简（必写两段，删按需段）", RULE_EXTRA)
+        for o in q.get("options") or []:
+            olen = len(o.get("text") or "")
+            if olen > LIMIT_OPTION_TEXT:
+                err(f"[篇幅] 题 {qid} 选项 {o.get('optionId')} 文本 {olen} 字 > "
+                    f"{LIMIT_OPTION_TEXT}——按 §三 篇幅硬线压短成一句断言", RULE_EXTRA)
+    if questions:
+        pct = program * 100 / len(questions)
+        if pct > LIMIT_PROGRAM_PCT:
+            err(f"[篇幅] 本批程序题 {program}/{len(questions)} = {pct:.0f}% > "
+                f"{LIMIT_PROGRAM_PCT}%——按 §三 篇幅硬线改写为短概念题", RULE_EXTRA)
+
+
 def run_selftest():
     """用共同夹具自检本脚本的规则判定（与 Kotlin 端 AppLevelFixturesTest 同一组用例）。
 
@@ -384,6 +434,7 @@ def main():
     schema_ok = validate_schema(batch, schema)
     validate_app_level(batch)
     validate_vocabulary(batch)
+    validate_brevity(batch)
 
     # 与已有批次核对（仅当目录存在）
     batches_dir = args.batches_dir

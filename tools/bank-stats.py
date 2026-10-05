@@ -26,6 +26,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from brevity import (LIMIT_CODE_BLOCKS, LIMIT_CODE_LINES, LIMIT_EXPLANATION,  # noqa: E402
+                     LIMIT_OPTION_TEXT, LIMIT_PROGRAM_PCT, LIMIT_STEM_TEXT, LIMIT_STEM_TOTAL,
+                     over_limit, question_metrics, split_code_blocks)
 from vocab import FROZEN_TAGS, load_vocabulary  # noqa: E402
 
 # 本机批次目录走环境变量 ZHILIAN_BATCHES_DIR（个人路径不进公开仓库）；未设置时回落当前目录
@@ -75,6 +78,7 @@ def main():
                    for rid in (data.get("retiredQuestionIds") or [])}
 
     questions_by_subject = collections.defaultdict(list)  # subject -> [(文件名, q)]，仅可练习题
+    brevity_by_batch = []   # [(文件名, subject, [可练习题])]，供篇幅盘面
     type_counter = collections.Counter()
     tag_counter = collections.defaultdict(collections.Counter)  # subject -> tag -> 次数
     src_counter = collections.Counter()
@@ -102,12 +106,14 @@ def main():
                 continue
             active.append(q)
 
-        code = sum(1 for q in active if "```" in (q.get("stem") or ""))
+        code = sum(1 for q in active if split_code_blocks(q.get("stem") or "")[1])
         pct = f"{code * 100 // len(active)}%" if active else "-"
         file_note = f"（文件 {len(qs)} 条）" if len(active) != len(qs) else ""
         declared = len(data.get("retiredQuestionIds") or [])
         print(f"  {name:<44} {subject:<10} {len(active):>3} 题{file_note} | 程序题 {code:>2} ({pct})"
               f"{' | 停用声明 ' + str(declared) if declared else ''}")
+
+        brevity_by_batch.append((name, subject, active))
 
         for q in active:
             questions_by_subject[subject].append((name, q))
@@ -131,6 +137,40 @@ def main():
     if duplicate_ids:
         print(f"  ! 跨批次重复 questionId {len(duplicate_ids)} 个（已按首次出现计入，未双计）："
               f"{'、'.join(sorted(set(duplicate_ids)))}")
+
+    section("篇幅盘面（§三 硬线 · 2026-10-05 全库改定，见 ADR-0016）")
+    print(f"  硬线：题干文字 ≤{LIMIT_STEM_TEXT} / 题干总长 ≤{LIMIT_STEM_TOTAL} / "
+          f"代码块 ≤{LIMIT_CODE_BLOCKS} 个且 ≤{LIMIT_CODE_LINES} 行 / 解析 ≤{LIMIT_EXPLANATION} / "
+          f"单选项 ≤{LIMIT_OPTION_TEXT} / 程序题 ≤{LIMIT_PROGRAM_PCT}%")
+    label = {"题干文字": "题干文字", "题干总长": "题干总长", "代码块数": "块数",
+             "代码块行数": "块行数", "解析": "解析", "选项": "选项"}
+    rows = []
+    for name, _subject, active in brevity_by_batch:
+        if not active:
+            continue
+        counts = collections.Counter()
+        bad_qs = program = max_block = 0
+        for q in active:
+            m = question_metrics(q)
+            program += 1 if m["is_program"] else 0
+            max_block = max(max_block, m["max_block"])
+            bad = over_limit(m)
+            if bad:
+                bad_qs += 1
+                for it in bad:
+                    counts[it] += 1
+        hits = "、".join(f"{label[k]}{counts[k]}" for k in label if counts[k])
+        if program * 100 / len(active) > LIMIT_PROGRAM_PCT:
+            hits = (hits + "、" if hits else "") + f"程序题{program}/{len(active)}"
+        rows.append((bad_qs, name, len(active), max_block, hits))
+    total_q = sum(r[2] for r in rows)
+    total_bad = sum(r[0] for r in rows)
+    print(f"  全库超标题 {total_bad}/{total_q}（{total_bad * 100 // total_q if total_q else 0}%）；"
+          f"达标批 {sum(1 for r in rows if not r[4])}/{len(rows)}")
+    for bad_qs, name, n, max_block, hits in sorted(rows, key=lambda r: -r[0]):
+        flag = "OK " if not hits else "!! "
+        print(f"  {flag}{name:<44} 超标 {bad_qs:>2}/{n:<3} | 最大块 {max_block:>3} 行 | "
+              + (hits if hits else "全部达标"))
 
     section("分类覆盖矩阵（科目 · 分类 → 可练习题数 [题型细分]）")
     cat_matrix = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
