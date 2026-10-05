@@ -58,7 +58,7 @@
 ### 3. JSON 预校验（PC 端，必须做）
 
 ```powershell
-cd C:\Code\Android\知练
+cd <本仓库根目录>
 python tools\batch-check.py <批次文件路径>
 ```
 
@@ -118,10 +118,12 @@ verdict              PASS / REVISE(附具体怎么改) / REJECT
 本机已实测可用（零额外下载，单文件约 4 秒）：
 
 ```powershell
-$CO = "C:\Tools\scoop\apps\gradle\current\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlinx\kotlinx-coroutines-core-jvm\1.10.2\4a9f78ef49483748e2c129f3d124b8fa249dafbf\kotlinx-coroutines-core-jvm-1.10.2.jar"
+$CO = "<Gradle 用户目录>\caches\modules-2\files-2.1\org.jetbrains.kotlinx\kotlinx-coroutines-core-jvm\1.10.2\4a9f78ef49483748e2c129f3d124b8fa249dafbf\kotlinx-coroutines-core-jvm-1.10.2.jar"
 kotlinc <题名>.kt -cp $CO -include-runtime -d <题名>.jar
 java -cp "<题名>.jar;$CO" <题名>Kt      # 必须 -cp；-jar 会 NoClassDefFoundError
 ```
+
+> `<Gradle 用户目录>` 取 `$env:GRADLE_USER_HOME`（未设置时为本机 `~/.gradle`）；示例里那串 40 位十六进制是该 artifact 在缓存中的哈希目录名，按本机实际目录替换。
 
 最省事方式（免建 jar，同为约 4 秒）：`kotlin -cp $CO <脚本>.kts`
 
