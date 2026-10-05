@@ -38,11 +38,28 @@ class BatchReconcileServiceTest {
         override suspend fun updateQuestions(questions: List<QuestionEntity>) {
             questions.forEach { updated ->
                 val i = this.questions.indexOfFirst { it.questionId == updated.questionId }
-                if (i >= 0) this.questions[i] = updated
+                if (i >= 0) {
+                    // 与真实 DAO `updateContent` 同口径：只覆盖内容列，本地状态列随 questionId 保留。
+                    // 替身曾直接整行替换（等同误用 `@Update`）——那会把 ADR-0017
+                    // 「作答历史与掌握度不被覆盖」的核心声明在测试里建模成相反语义。
+                    val prior = this.questions[i]
+                    this.questions[i] = updated.copy(
+                        inactive = prior.inactive,
+                        consecutivePerfect = prior.consecutivePerfect,
+                        hasEverWrong = prior.hasEverWrong,
+                        favorite = prior.favorite,
+                        importedAt = prior.importedAt,
+                    )
+                }
             }
         }
 
         override suspend fun markInactive(ids: List<String>) {
+            // 与真实 DAO 同口径：停用要落到题上，下轮对账才能识别「已是停用态」
+            ids.forEach { id ->
+                val i = questions.indexOfFirst { it.questionId == id }
+                if (i >= 0) questions[i] = questions[i].copy(inactive = true)
+            }
             inactiveIds += ids
         }
 
@@ -140,6 +157,48 @@ class BatchReconcileServiceTest {
         )
         assertTrue(store.questions.any { it.questionId == "newbie" })
         assertTrue("跨批次停用必须在写题之后生效", "newbie" in store.inactiveIds)
+    }
+
+    @Test
+    fun `同 ID 更新不清本地状态——历史与掌握度随 questionId 保留`() = runBlocking {
+        val store = FakeReconcileStore()
+        val svc = service(store)
+        svc.reconcile(listOf(source("v1.json", batchJson(stem = "旧题干"))))
+        // 本机产生学习痕迹
+        store.questions[0] = store.questions[0].copy(
+            consecutivePerfect = 2, hasEverWrong = true, favorite = true, importedAt = 123L,
+        )
+
+        svc.reconcile(listOf(source("v2.json", batchJson(stem = "新题干"))))
+
+        val q = store.questions.single()
+        assertEquals("新题干", q.stem)                 // 内容按文件刷新
+        assertEquals(2, q.consecutivePerfect)   // ↓ 本地状态不被覆盖
+        assertTrue(q.hasEverWrong)
+        assertTrue(q.favorite)
+        assertEquals(123L, q.importedAt)
+    }
+
+    @Test
+    fun `撤销后重导——别处声明的停用照样补回`() = runBlocking {
+        // 回归：停用声明在 high 批，题属 low 批。撤销 low 后重导，high 指纹未变会被跳过，
+        // 若只重放变化批次，那道题就回到可用态（与 batch-0018 事故同类的漏停用）。
+        val store = FakeReconcileStore()
+        val svc = service(store)
+        val low = source("low.json", batchJson(batchId = "bLow", batchOrder = 11, questionId = "newbie"))
+        val high = source(
+            "high.json",
+            batchJson(batchId = "bHigh", batchOrder = 18, questionId = "other", retired = listOf("newbie")),
+        )
+        svc.reconcile(listOf(low, high))
+        assertTrue("newbie" in store.inactiveIds)
+
+        svc.undoBatch("bLow")
+        val digest = svc.reconcile(listOf(low, high))
+
+        assertEquals(1, digest.inserted)
+        assertEquals("跳过的 high 批仍应贡献停用", 1, digest.retired)
+        assertTrue(store.questions.first { it.questionId == "newbie" }.inactive)
     }
 
     @Test

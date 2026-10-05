@@ -63,9 +63,12 @@ data class BatchPlan(
 data class ReconcilePlan(
     val toInsert: List<QuestionEntity>,
     val toUpdate: List<QuestionEntity>,
-    /** 待统一停用的题目 ID：各**变化批次**停用列表并集 ∩（现有 ∪ 本轮新增） */
+    /**
+     * 待统一停用的题目 ID：**目录内全部有效批次**（含指纹未变者）停用列表的并集，
+     * 且只留「本轮写入后可用」的目标——已停用的不重复计入，摘要才不因幂等而虚高。
+     */
     val retireIds: List<String>,
-    /** 停用列表里不在库的 ID（无害提示，不计失败） */
+    /** 停用列表里不在库的 ID（无害提示，不计失败；只报**变化批次**，免每轮刷屏） */
     val retiredMissing: List<String>,
     val duplicates: List<DuplicateCandidate>,
     val batchRecords: List<ProcessedBatchEntity>,
@@ -95,6 +98,8 @@ object BatchReconcilePlanner {
     ): ReconcilePlan {
         val blocked = parseBlocked.toMutableList()
         val batchPlans = mutableListOf<BatchPlan>()
+        // 指纹未变批次的停用声明也要收集：见下方「目录级并集」注释
+        val unchangedRetired = mutableListOf<String>()
         var unchanged = 0
 
         // 顺序号冲突：目录内同序不同批，或与已入库记录撞序（本批自身同号不算冲突）
@@ -112,9 +117,11 @@ object BatchReconcilePlanner {
         candidates.sortedWith(compareBy({ it.batch.batchOrder }, { it.fileName })).forEach { c ->
             val batch = c.batch
 
-            // 指纹一致 = 已对账，整批不动（也不重算停用：上次已生效）
+            // 指纹一致 = 内容不动，但**停用声明仍要参与本轮重放**：「上次已生效」不等于
+            // 「现在还在库生效」——目标题可能被「撤销批次导入」删掉后又被本轮重插回来。
             if (context.storedFingerprints[batch.batchId] == c.fingerprint) {
                 unchanged++
+                unchangedRetired += batch.retiredQuestionIds
                 return@forEach
             }
 
@@ -189,11 +196,18 @@ object BatchReconcilePlanner {
             p.toUpdate.forEach { if (seenIds.add(it.questionId)) toUpdateAll += it }
         }
 
-        // 停用并集：以**写入后**的题目集合为界，故 0018 停用 0011 新增题这类跨批次停用也成立
+        // 停用重放取**目录级并集**（含指纹未变的批次），不只取变化批次：撤销某批导入后
+        // 该批题目会被重插，而停用声明往往写在另一批（那批指纹未变、本轮被跳过）——只重放
+        // 变化批次就让那道题永久回到可用态，与 batch-0018 事故同类的结构性漏停用。
+        // 被拒（blocked）批次不参与：它的停用意图尚未通过校验，不该产生写入。
         val postWriteIds = context.existing.keys + toInsertAll.map { it.questionId }
-        val allRetired = batchPlans.flatMap { it.retiredIds }.distinct()
-        val retireIds = allRetired.filter { it in postWriteIds }
-        val retiredMissing = allRetired.filter { it !in postWriteIds }
+        val changedRetired = batchPlans.flatMap { it.retiredIds }.distinct()
+        val directoryRetired = (changedRetired + unchangedRetired).distinct()
+        val insertedIds = toInsertAll.map { it.questionId }.toSet()
+        // 只重放「本轮写入后处于可用态」的目标：已停用的跳过，markInactive 因此是幂等空转，
+        // 且 retired 计数＝真正新停用的题数
+        val retireIds = directoryRetired.filter { it in insertedIds || context.existing[it]?.inactive == false }
+        val retiredMissing = changedRetired.filter { it !in postWriteIds }
 
         val records = batchPlans.map { p ->
             ProcessedBatchEntity(

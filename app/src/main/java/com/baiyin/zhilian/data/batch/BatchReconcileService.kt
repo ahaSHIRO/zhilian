@@ -49,8 +49,9 @@ class BatchReconcileService internal constructor(
     /**
      * 对整个目录做一次对账。**幂等**：同一批来源重复调用不产生额外变更。
      *
-     * 单事务内先写所有批次的新增与更新，再统一执行全部变化批次的 `retiredQuestionIds`——
-     * 这使批次导入顺序不再影响结果（根治 batch-0018 早于 batch-0011 时停用丢失）。
+     * 单事务内先写所有批次的新增与更新，再统一执行停用——停用取**目录级并集**
+     * （含指纹未变被跳过的批次），故「导入顺序」（batch-0018 早于 batch-0011）与
+     * 「撤销后重导」两条漏停用通道都不会发生。规则在 [BatchReconcilePlanner]，本类只编排。
      */
     suspend fun reconcile(sources: List<BatchSource>): ReconcileDigest {
         val candidates = mutableListOf<BatchCandidate>()

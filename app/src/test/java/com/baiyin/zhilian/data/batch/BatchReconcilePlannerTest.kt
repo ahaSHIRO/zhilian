@@ -124,6 +124,51 @@ class BatchReconcilePlannerTest {
     }
 
     @Test
+    fun `撤销后重导：未变批次的停用照样补上`() {
+        // 回归（结构性漏停用）：停用声明写在 b18，而题属于 b11。撤销 b11 导入后其记录被删、
+        // 题目重插，b18 指纹未变本轮被跳过——只重放变化批次就让这道题永久回到可用态。
+        val retire = batch(
+            questions = listOf(q(id = "other18")),
+            retired = listOf("k-0011-02"),
+            batchId = "b18", batchOrder = 18,
+        )
+        val revived = batch(
+            questions = listOf(q(id = "k-0011-02", stem = "重插回来的题")),
+            batchId = "b11", batchOrder = 11,
+        )
+        val plan = BatchReconcilePlanner.plan(
+            listOf(candidate(revived, "0011.json"), candidate(retire, "0018.json")),
+            context(fingerprints = mapOf("b18" to BatchFingerprint.of(retire))),
+            now = 5L,
+        )
+        assertTrue(plan.toInsert.any { it.questionId == "k-0011-02" })
+        assertEquals(1, plan.unchangedBatches) // b18 确实被跳过了
+        assertEquals("跳过的批次也得贡献停用", listOf("k-0011-02"), plan.retireIds)
+    }
+
+    @Test
+    fun `已停用的目标不重复计入——幂等不使摘要虚高`() {
+        val retiredQuestion = existingFrom(q(id = "k1", stem = "已停用的题"), batchId = "b0").copy(inactive = true)
+        val b = batch(retired = listOf("k1")) // b1 变化，停用一个已经是停用态的题
+        val plan = BatchReconcilePlanner.plan(listOf(candidate(b)), context(listOf(retiredQuestion)), now = 5L)
+        assertTrue("已是停用态不该重复进停用集合", plan.retireIds.isEmpty())
+        assertTrue("但在库，不算缺失", plan.retiredMissing.isEmpty())
+    }
+
+    @Test
+    fun `被拒批次的停用不参与重放`() {
+        // 顺序号冲突使两批全进「待处理」：它们的停用意图尚未通过校验，不该产生任何写入
+        val a = batch(batchId = "b1", batchOrder = 5, retired = listOf("k9"))
+        val b = batch(batchId = "b2", batchOrder = 5)
+        val k9 = existingFrom(q(id = "k9", stem = "无关题"), batchId = "b0")
+        val plan = BatchReconcilePlanner.plan(
+            listOf(candidate(a), candidate(b)), context(listOf(k9)), now = 5L,
+        )
+        assertEquals(2, plan.blocked.size)
+        assertTrue(plan.retireIds.isEmpty())
+    }
+
+    @Test
     fun `顺序号冲突整批进待处理`() {
         val a = batch(batchId = "b1", batchOrder = 5)
         val b = batch(batchId = "b2", batchOrder = 5)
