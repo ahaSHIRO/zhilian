@@ -32,19 +32,24 @@ import re
 import sys
 
 
-def strip_html(text: str) -> str:
+def strip_html(text: str, keep_lines: bool = False) -> str:
     text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", text)
     text = re.sub(r"(?s)<[^>]+>", " ", text)
     text = html.unescape(text)
-    return re.sub(r"[ \t\x0b\f\r]+", " ", text)
+    if keep_lines:
+        return re.sub(r"[ \t\x0b\f\r]+", " ", text)
+    return re.sub(r"\s+", " ", text)      # 换行也折叠：跨行短语才查得到（pitfalls 3.14/3.15）
 
 
-def read_text(path: str) -> str:
+def read_text(path: str, keep_lines: bool = False) -> str:
+    """去标签文本。默认**折叠全部空白（含换行）**——跨行短语检索必须如此，
+    否则会得出「官方没写」的假结论（2026-10-05 实测：`Since: 9` 在页面上跨行，
+    按行匹配命中 0、折叠后命中 13）。keep_lines=True 仅用于显示行号样本。"""
     raw = open(path, encoding="utf-8", errors="replace").read()
     head = raw[:4000].lower()
     if "<html" in head or "<body" in head or "<!doctype" in raw[:200].lower():
-        return strip_html(raw)
-    return raw
+        return strip_html(raw, keep_lines)
+    return raw if keep_lines else re.sub(r"\s+", " ", raw)
 
 
 def cmd_dump(a) -> int:
@@ -79,18 +84,24 @@ def cmd_dump(a) -> int:
 
 
 def cmd_count(a) -> int:
-    text = read_text(a.file)
-    lines = text.split("\n")
+    text = read_text(a.file)                                  # 命中数以此为准（空白全折叠）
+    lines = read_text(a.file, keep_lines=True).split("\n")     # 仅用于显示行号样本
     flags = 0 if a.case_sensitive else re.I
     print(f"文件: {a.file}")
-    print(f"总字符 {len(text)}   总行 {len(lines)}   大小写："
+    print(f"总字符 {len(text)}（已折叠全部空白）   大小写："
           f"{'敏感' if a.case_sensitive else '不敏感（加 -c 改用敏感；全大写标识符如 SIGNAL 别用默认值）'}")
     print("=" * 88)
     for p in a.patterns:
-        hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if re.search(p, ln, flags)]
-        print(f"{p!r:<46} 命中 {len(hits)}")
-        for i, ln in hits[: a.samples]:
-            print(f"    L{i}: {ln[:150]}")
+        n = len(re.findall(p, text, flags))
+        line_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if re.search(p, ln, flags)]
+        print(f"{p!r:<46} 命中 {n}")
+        if line_hits:
+            for i, ln in line_hits[: a.samples]:
+                print(f"    L{i}: {ln[:150]}")
+        elif n:
+            for m in list(re.finditer(p, text, flags))[: a.samples]:
+                s, e = max(0, m.start() - 60), min(len(text), m.end() + 60)
+                print(f"    （跨行命中，行号不适用）…{text[s:e]}…")
         print("-" * 88)
     if a.control:
         n = len(re.findall(a.control, text, flags))
