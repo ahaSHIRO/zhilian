@@ -123,6 +123,7 @@ def main() -> int:
     print("\n=== 预检（不写盘） ===")
 
     plans = {}                             # path -> [(qid, 描述, old_token, new_token)]
+    field_merges = {}                      # (path, qid, field) -> 原始整值：同一字段的多次编辑合并成一次替换
     expected = copy.deepcopy(doc_before)   # 程序化构造的预期文档，用于落笔后全等比对
 
     def locate(qid):
@@ -148,19 +149,18 @@ def main() -> int:
 
         if kind == "field":
             field = e["field"]
-            cur = field_value(q, field)
+            # 用「预期文档的当前值」而非原文：这样同一字段的多处编辑能顺序累积
+            cur = field_value(q_exp, field)
             n = cur.count(e["old"])
             if n != 1:
                 print(f"预检失败：{qid[:8]} 字段 {field} 内 old 命中 {n} 次（应为 1）")
                 return 1
-            new_val = cur.replace(e["old"], e["new"], 1)
-            otok = json.dumps(cur, ensure_ascii=False)
-            ntok = json.dumps(new_val, ensure_ascii=False)
+            set_field(q_exp, field, cur.replace(e["old"], e["new"], 1))
+            otok = json.dumps(field_value(q, field), ensure_ascii=False)   # 原值：落盘时用它定位
             if raw.count(otok) != 1:
                 print(f"预检失败：{qid[:8]} 字段 {field} 的整值在文件里命中 {raw.count(otok)} 次（应为 1）")
                 return 1
-            set_field(q_exp, field, new_val)
-            plans.setdefault(path, []).append((qid, f"{field} 替换", otok, ntok))
+            field_merges[(path, qid, field)] = otok
 
         elif kind in ("array_remove", "array_append"):
             lb, rb = array_span(raw, qid, "acceptableAnswers")
@@ -188,6 +188,11 @@ def main() -> int:
             print(f"未知 kind：{kind}")
             return 1
         print(f"  OK  {qid[:8]}  {kind:<13} {os.path.basename(path)}")
+
+    # 把同一字段的多处编辑合并成「原值 -> 最终值」一次替换
+    for (path, qid, field), otok in field_merges.items():
+        final_val = field_value(next(q for q in expected[path]["questions"] if q["questionId"] == qid), field)
+        plans.setdefault(path, []).append((qid, f"{field} 替换", otok, json.dumps(final_val, ensure_ascii=False)))
 
     print(f"\n预检通过：{len(spec)} 条编辑，涉及 {len(plans)} 个文件")
     for p in sorted(plans):
