@@ -14,9 +14,13 @@
 python tools\batch-check.py <批次.json>   # 批次 JSON 预校验
 python tools\batch-check.py --selftest    # 应用级规则跨端一致性自检（与 App 端同夹具）
 python tools\bank-stats.py                # 题库存量盘面（科目/分类/题型/标签/程序题占比）
+python tools\bank-sweep.py                # 全库错误模式粗筛（强断言/引文/章节号等，出待复核清单）
+python tools\check-citations.py           # 解析里的 JLS/JVMS 章节号核查（含阳阴对照自证）
+python tools\apply-edits.py --spec <清单.json>   # 批次内容刷新（默认 dry-run；--apply 才落笔）
+python tools\evidence.py dump <questionId前缀>   # 复核取证：题目原文 / 命中计数+对照词 / 落盘页上下文
 ```
 
-两个 Python 工具从环境变量 `ZHILIAN_BATCHES_DIR` 读本机批次目录（维护者机器已配置）；未设置的机器须用 `--batches-dir` 显式传入，否则跨批次核对会静默跳过。**本仓库已公开在 GitHub——任何个人路径、凭据不得入库，本机配置一律走环境变量。**
+上述 Python 工具都从环境变量 `ZHILIAN_BATCHES_DIR` 读本机批次目录（维护者机器已配置）；未设置的机器须用 `--batches-dir` 显式传入，否则跨批次核对会静默跳过。`check-citations.py` 抓官方规范页时可选走 `ZHILIAN_SPEC_PROXY`。**本仓库已公开在 GitHub——任何个人路径、凭据不得入库，本机配置一律走环境变量。**
 
 ### 构建内存纪律（16 GB 机器实测）
 
@@ -36,8 +40,8 @@ python tools\bank-stats.py                # 题库存量盘面（科目/分类/�
 | `app/src/test/` | JVM 单测（判分、掌握度、填空匹配、编排等） |
 | `docs/conventions/` | question-authoring.md（出题规范）、pitfalls.md（踩坑手册）、edge-to-edge.md、design-tokens.md |
 | `docs/schema/` | batch-v1.schema.json + batch-spec-v1.md（批次 JSON 权威契约） |
-| `docs/adr/` | 已定案决策记录（0001–0017） |
-| `tools/` | batch-check.py 批次预校验（Schema + 应用级规则 + 跨批次重复 + 标签词表拦截）；bank-stats.py 存量盘面；vocab.py 词表解析（§八 为唯一权威源） |
+| `docs/adr/` | 已定案决策记录（0001–0018） |
+| `tools/` | batch-check.py 批次预校验（Schema + 应用级规则 + 跨批次重复 + 标签词表拦截）；bank-stats.py 存量盘面；vocab.py 词表解析（§八 为唯一权威源）；bank-sweep.py 全库错误模式粗筛；check-citations.py 规范章节号核查（含协议自证）；apply-edits.py 批次内容刷新落笔器（fail-closed：原文不命中即中止、失败回滚）；evidence.py 复核取证三合一（题目原文 / 命中计数含对照词 / 落盘页上下文检索） |
 | `CONTEXT.md` | 领域词汇表（科目/分类/标签/题目的身份语义） |
 
 ## 按任务路由（先读再动）
@@ -51,6 +55,8 @@ python tools\bank-stats.py                # 题库存量盘面（科目/分类/�
 | 遇到怪问题 | docs/conventions/pitfalls.md——先查有没有人踩过，踩了新坑修完追加 |
 | 动批次 JSON 字段 | docs/schema/batch-spec-v1.md + batch-v1.schema.json（Schema 为权威） |
 | 改同步 / 导入 / 题库对账 | docs/adr/0017-directory-authoritative-reconciliation.md（**目录为权威源、同 ID 原位更新、两阶段停用**）+ 0008（发现自动、不做后台静默入库；其「入库需显式动作」已被 0017 取代） |
+| 批次内容刷新 / 题库返工 | tools/apply-edits.py（**只改内容字段，绝不改身份键**：`questionId` / `batchId` / `batchOrder` / `retiredQuestionIds`——动了身份键就从「内容刷新」变成「投放新题」）+ docs/adr/0017-directory-authoritative-reconciliation.md |
+| 改批次管理页（已处理批次 / 撤销入口） | docs/adr/0018-batch-manage-ui-merge-orphan-and-undo-following-removal.md（撤销只对「文件已离场的孤儿批次」开放） |
 
 ## 协作红线（违反即返工）
 
@@ -63,7 +69,7 @@ python tools\bank-stats.py                # 题库存量盘面（科目/分类/�
    - **键盘 / ime 相关行为 MuMu 验不了**：它的输入法窗口高度恒为 0（`mInputShown=true` 但软键盘不占屏），`imePadding()` 永远加 0——在模拟器上得出的「键盘避让正常」是**假阴性**，一律走真机；自检判据见 pitfalls 2.18。
    - 除「模拟器复现不了」或用户明确要求真机外，不占用真机。确需真机时——自动化前确认手机空闲（`dumpsys activity activities` 查前台），**验证完立即息屏**（`adb shell input keyevent 26`，防 OLED 烧屏）。
 4. **构建成功 ≠ 验证通过**：真机验证前先 `adb install -r` 新 APK。
-5. **工具回执可能污染**：投放/删除等不可逆操作分步重验（存在性 → 列目录 → 双 hash 交叉核对），见 pitfalls 3.2。
+5. **工具回执可能污染**：投放/删除等不可逆操作分步重验（存在性 → 列目录 → 双 hash 交叉核对），见 pitfalls 3.2；**清理类操作**另见 pitfalls 3.13（重列 + `check-ignore`/`ls-files` 双确认，不以删除回执为准）。
 6. **改动/审查/答疑前优先主动读当前磁盘文件**，不凭记忆或旧快照下结论。
 7. **多会话并行时先隔离再动手**：同一个工作目录里的多个会话共享磁盘文件与 **git index**——一方暂存后，另一方跑一次不带路径的 `git commit` 就会把暂存卷走。① 提交一律用 `git commit --only -- <明确路径>`（对别人暂存了什么免疫），提交前核对 `git diff --cached --name-only`；② 若两个任务会改同一批文件（`strings.xml` / `CONTEXT.md` / `ZhilianApp.kt` 这类几乎必然撞），先 `git worktree add ../知练-<任务> -b <分支>` 给任务开独立目录——**同目录切分支不隔离任何东西，还会毁掉对方的未提交改动**；③ 合回 main 由人执行，AI 不自行 merge/push。
 
