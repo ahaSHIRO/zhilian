@@ -132,13 +132,9 @@
     <string name="batch_duplicate_existing">已有题</string>
     <string name="batch_duplicate_import">导入</string>
     <string name="batch_duplicate_skip">跳过</string>
-    <string name="batch_processed_title">已处理批次</string>
-    <string name="batch_processed_empty">还没有处理过批次。</string>
-    <string name="batch_processed_line">顺序号 %1$d · %2$s</string>
-    <string name="batch_processed_counts">导入 %1$d · 跳过 %2$d · 失败 %3$d · 待决 %4$d</string>
-    <string name="batch_status_imported">已导入</string>
-    <string name="batch_status_partial">部分成功</string>
-    <string name="batch_status_failed">失败</string>
+    <!-- 孤儿批次（ADR-0018）：已处理但文件已不在目录，仅在此可撤销 -->
+    <string name="batch_orphan_title">目录中已无文件的已处理批次</string>
+    <string name="batch_orphan_line">处理于 %1$s</string>
     <string name="batch_result_done">导入完成</string>
     <string name="batch_result_failed">导入失败</string>
     <string name="batch_result_counts">导入 %1$d，跳过 %2$d，失败 %3$d，停用 %4$d。</string>

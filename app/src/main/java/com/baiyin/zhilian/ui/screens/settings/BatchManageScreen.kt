@@ -56,6 +56,9 @@ import com.baiyin.zhilian.data.db.ProcessedBatchEntity
 import com.baiyin.zhilian.data.valueOrNull
 import com.baiyin.zhilian.ui.components.ZhilianCard
 import com.baiyin.zhilian.ui.theme.ZhilianSpacing
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 /**
@@ -383,42 +386,41 @@ fun BatchManageScreen(
                 }
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = ZhilianSpacing.xs)) }
-
-            // 已处理批次（DAO 已按 batch_order DESC 返回）
-            item {
-                Text(stringResource(R.string.batch_processed_title), style = MaterialTheme.typography.titleMedium)
+            // 孤儿批次（ADR-0018）：已处理但文件已不在目录。仅在扫描完成且有孤儿时出现，
+            // 平时不占篇幅；撤销对这些批次才真正生效——文件已离场，不会被下次自动对账重导抵消。
+            // 文件还在目录的已处理批次不在此处、也不挂撤销（手机端不越权推翻电脑端权威）。
+            // 双重匹配（batchId 或 fileName 任一命中即非孤儿）：避免「文件在目录但解析失败」
+            // （dto.batchId 为 null）被误判为孤儿。
+            val orphanBatches = processedBatches.filter { pb ->
+                batches.none { it.dto?.batchId == pb.batchId || it.file.name == pb.fileName }
             }
-            if (processedBatches.isEmpty()) {
+            if (scanState is ScanState.Ready && orphanBatches.isNotEmpty()) {
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = ZhilianSpacing.xs)) }
                 item {
-                    Text(
-                        stringResource(R.string.batch_processed_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(stringResource(R.string.batch_orphan_title), style = MaterialTheme.typography.titleMedium)
                 }
-            }
-            items(processedBatches, key = { it.batchId }) { b ->
-                ZhilianCard {
-                    Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
-                        Text(
-                            stringResource(R.string.batch_processed_line, b.batchOrder, statusLabel(b.status)),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            stringResource(
-                                R.string.batch_processed_counts,
-                                b.importedCount, b.skippedCount, b.failedCount, b.pendingDuplicateCount,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
-                            TextButton(onClick = { undoTarget = b }) {
-                                Text(
-                                    stringResource(R.string.batch_undo_action),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
+                items(orphanBatches, key = { it.batchId }) { b ->
+                    ZhilianCard {
+                        Column(modifier = Modifier.padding(ZhilianSpacing.cardInnerCompact)) {
+                            Text(b.fileName, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                stringResource(
+                                    R.string.batch_orphan_line,
+                                    remember(b.processedAt) {
+                                        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            .format(Date(b.processedAt))
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(ZhilianSpacing.sm)) {
+                                TextButton(onClick = { undoTarget = b }) {
+                                    Text(
+                                        stringResource(R.string.batch_undo_action),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
                         }
                     }
@@ -617,10 +619,3 @@ private fun stemPreview(questionJson: String): String = runCatching {
 
 @kotlinx.serialization.Serializable
 private data class QuestionDtoPreview(val stem: String)
-
-@Composable
-private fun statusLabel(status: String): String = when (status) {
-    "IMPORTED" -> stringResource(R.string.batch_status_imported)
-    "PARTIAL" -> stringResource(R.string.batch_status_partial)
-    else -> stringResource(R.string.batch_status_failed)
-}
