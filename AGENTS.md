@@ -18,6 +18,16 @@ python tools\bank-stats.py                # 题库存量盘面（科目/分类/�
 
 两个 Python 工具从环境变量 `ZHILIAN_BATCHES_DIR` 读本机批次目录（维护者机器已配置）；未设置的机器须用 `--batches-dir` 显式传入，否则跨批次核对会静默跳过。**本仓库已公开在 GitHub——任何个人路径、凭据不得入库，本机配置一律走环境变量。**
 
+### 构建内存纪律（16 GB 机器实测）
+
+守护进程堆上限就在**项目根** `gradle.properties` 里（`org.gradle.jvmargs=-Xmx2048m` + `kotlin.daemon.jvmargs=-Xmx1024m`）——这两个值是为控制常驻内存定的，**不要为了“构建更快”把它们调回去**；它们不是个人路径/凭据，故作例外入库。三条已实测的事实：
+
+- **JVM 堆涨上去不会归还系统**（正常行为，不是泄漏），所以上限就是长期占用。“Mem Reduct 清完还涨”不是没清干净，私有内存清不掉，降上限才是唯一有效手段。
+- 临时改上限走命令行 `-Dorg.gradle.jvmargs=…`（实测优先于项目文件），但它会**新起一个不可复用的守护进程、旧的那个并未退出**，反而短暂更吃内存——不要在同一项目里来回切上限值。用户级 `~/.gradle/gradle.properties` 与项目根同名键谁赢，官方文档未说死、本机**未实测**：别把调优写到用户级就以为生效。
+- **改完必须验实际命令行**：`Get-CimInstance Win32_Process -Filter "Name='java.exe'"` 看每个 daemon 的 `-Xmx`，别看任务管理器的工作集（会被换出骗人）。
+
+一整轮构建完不再需要时跑 `.\gradlew.bat --stop`（会杀所有空闲 daemon；**有别的会话在构建时不要跑**）。守护进程空闲 10 分钟也会自动退（`org.gradle.daemon.idletimeout`，默认 3 小时）。模拟器不吃 Gradle 的堆——**不验 UI 就别起 MuMu**（单进程约 4.8 GB）。
+
 ## 目录地图
 
 | 路径 | 内容 |
