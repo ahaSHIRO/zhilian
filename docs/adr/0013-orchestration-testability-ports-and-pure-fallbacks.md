@@ -21,6 +21,7 @@
 - **`resolveDuplicate` 与 observe 方法暂走 db**：`ImportStore` 只覆盖 `importFromUri` 的数据存取面，`resolveDuplicate`（状态规则已在 ADR-0012 收口）与 `observePendingDuplicates` / `observeProcessedBatches` 暂直接用 `ZhilianDatabase`——渐进重构，后续可纳入统一 store。
 - **窄接口暴露 Room 实体**（`AnswerRecordEntity` / `QuestionEntity` / `PendingDuplicateEntity` / `ProcessedBatchEntity`）：纯函数已产出它们，测试替身构造成本低，不额外抽象「值对象 ↔ 实体」转换层。
 - **`findExistingIds` / `findStemOwners` 返回原始类型**（`List<String>` / `List<StemOwnerRow>`）：组装（`toSet` / `associate`）留给 `buildImportContext` 纯函数——若接口直接返回 `Set` / `Map`，组装逻辑就藏进实现、无法纯测。
+- **同一手法已扩展到题库对账（2026-10-05 补充）**：`ReconcileStore`（生产 `RoomReconcileStore`）是 [ADR-0017](./0017-directory-authoritative-reconciliation.md) 的对账编排 `BatchReconcileService` 的数据存取面，形状与 `ImportStore` 一致；SAF 读取仍留壳（`BatchSaf`），测试接内存替身（`BatchReconcileServiceTest`）。
 
 ## 关键签名
 

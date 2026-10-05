@@ -21,3 +21,4 @@
 - **adapter 仍持有 I/O 判断**：`item == null` 早退、import 动作的 `stillExists` 查重属 I/O，刻意留在 adapter——纯化它们收益为零，反而会把查询塞进纯函数。
 - **挂起重议条件**：若批次状态将来从「IMPORTED / PARTIAL 二态」演进为显式多态（如把 FAILED 提升为独立状态、或引入 PENDING 中间态），本条的 `batchStatus` 二态签名需重审。
 - `ImportPlan.status` 保持计算属性、interface 不变，既有 `BatchImportPlannerTest` 的六处 `plan.status` 断言不受影响。
+- **覆盖范围扩大（2026-10-05 补充）**：题库对账路径的批次完成态 `BatchReconcilePlanner.BatchPlan.status`（[ADR-0017](./0017-directory-authoritative-reconciliation.md)）同样调用 `batchStatus`——本条的「唯一落点」现在同时守手动导入与自动对账两条路径。注意对账路径的 `failedCount` **只数校验失败**（不进 issues 的「同 ID 未变」不算失败），故 `BatchPlan.failedCount = issues.size`，**不沿用**旧 `plan()` 的 `issues.size - skippedCount`（照搬会把失败数算成负数）。
